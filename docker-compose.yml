@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # Servicio para la aplicación frontend de CUMPLE
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_AGENT_ZERO_URL=http://agent-zero:5000
+    depends_on:
+      - agent-zero
+    networks:
+      - cumple-network
+
+  # Servicio para Agent-Zero
+  agent-zero:
+    build:
+      context: ./agent-zero
+      dockerfile: docker/Dockerfile
+    ports:
+      - "5000:5000"  # Puerto para la API/UI Web
+      - "11434:11434"  # Puerto para Ollama
+    volumes:
+      - ./agent-zero:/a0
+      - ./agent-zero/tmp:/tmp
+      - ./cumple-prompts:/a0/prompts/cumple
+    environment:
+      - WEB_UI_HOST=0.0.0.0
+      - WEB_UI_PORT=5000
+      - AUTH_LOGIN=${AGENT_ZERO_USER:-admin}
+      - AUTH_PASSWORD=${AGENT_ZERO_PASSWORD:-admin}
+      - API_KEY_OPENAI=${OPENAI_API_KEY:-}
+    networks:
+      - cumple-network
+
+# Volúmenes para persistencia de datos
+volumes:
+  agent-zero-data:
+
+# Red compartida
+networks:
+  cumple-network:
+    driver: bridge 

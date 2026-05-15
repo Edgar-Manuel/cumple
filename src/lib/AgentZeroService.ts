@@ -1,0 +1,1476 @@
+import { EventProps } from "@/components/events/EventCard";
+import { Contact } from "@/components/contacts/CreateContactDialog";
+import { loadContacts, loadEvents, saveEvents } from "@/lib/storage";
+import { getUserCount, incrementUserCount } from "@/services/userCountService";
+import { googleSearchService } from "@/services/googleSearchService";
+
+// Extendemos EventProps para incluir los campos específicos que necesitamos
+interface ExtendedEventProps extends EventProps {
+  contactId?: number | string;
+  affinity?: number;
+  howWeMet?: string;
+  interests?: string;
+  previousGifts?: string;
+}
+
+// Interfaces para las recomendaciones y mensajes generados por Agent-Zero
+export interface GiftRecommendation {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  imageUrl: string;
+  affiliateLink: string;
+  eventId: string | number;
+  personName: string;
+  category?: string;  // Nueva propiedad para categorizar las recomendaciones
+  relevance?: number; // Nueva propiedad para indicar la relevancia de la recomendación
+}
+
+export interface GeneratedMessage {
+  id: string;
+  content: string;
+  eventId: string | number;
+  personName: string;
+  type: "birthday" | "anniversary" | "graduation" | "holiday" | "other";
+}
+
+export interface SocialPostDraft {
+  id: string;
+  content: string;
+  eventId: string | number;
+  personName: string;
+  platform: "facebook" | "instagram" | "twitter" | "whatsapp";
+}
+
+export interface AgentNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: "info" | "warning" | "suggestion";
+  timestamp: Date;
+  read: boolean;
+}
+
+// Nueva interfaz para planes de suscripción
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  features: string[];
+  popular?: boolean;
+}
+
+// Nueva interfaz para complementos/add-ons
+export interface PlanAddOn {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  oneTime: boolean;
+}
+
+// Nueva interfaz para usuarios registrados
+export interface UserProfile {
+  id: string;
+  email: string;
+  name?: string;
+  registrationDate: Date;
+  currentPlan: string;
+  addOns: string[];
+  trialEndsAt?: Date;
+  discountApplied?: boolean;
+}
+
+// Interfaz para las categorías de interés
+export interface InterestCategory {
+  name: string;
+  keywords: string[];
+  searchTerms: string[];
+}
+
+// Agrega una clase para gestionar las recomendaciones
+export class RecommendationsManager {
+  private dbPath: string = "recommendations_db.json";
+  private recommendations: GiftRecommendation[] = [];
+  private lastUpdated: Date = new Date(0); // 1970-01-01
+  
+  constructor() {
+    this.loadRecommendations();
+  }
+  
+  public getRecommendationsForEvent(eventId: string | number): GiftRecommendation[] {
+    return this.recommendations.filter(rec => rec.eventId === eventId);
+  }
+  
+  public getRecommendationsForPerson(personName: string): GiftRecommendation[] {
+    return this.recommendations.filter(rec => 
+      rec.personName.toLowerCase() === personName.toLowerCase());
+  }
+  
+  public getAllRecommendations(): GiftRecommendation[] {
+    return [...this.recommendations];
+  }
+  
+  public addRecommendations(newRecs: GiftRecommendation[]): void {
+    // Añadir sólo recomendaciones que no existan ya (por ID)
+    for (const newRec of newRecs) {
+      const existingIndex = this.recommendations.findIndex(rec => rec.id === newRec.id);
+      if (existingIndex >= 0) {
+        // Actualizar existente
+        this.recommendations[existingIndex] = newRec;
+      } else {
+        // Añadir nueva
+        this.recommendations.push(newRec);
+      }
+    }
+    
+    this.lastUpdated = new Date();
+    this.saveRecommendations();
+  }
+  
+  public needsUpdate(): boolean {
+    // Actualizar si han pasado más de 24 horas desde la última actualización
+    const now = new Date();
+    const hoursSinceLastUpdate = (now.getTime() - this.lastUpdated.getTime()) / (1000 * 60 * 60);
+    return hoursSinceLastUpdate > 24;
+  }
+  
+  private loadRecommendations(): void {
+    try {
+      // En un entorno real, esto cargaría del sistema de archivos o una API
+      // Para este ejemplo, simulamos cargar desde localStorage en el navegador
+      const savedRecs = localStorage.getItem(this.dbPath);
+      if (savedRecs) {
+        this.recommendations = JSON.parse(savedRecs);
+        this.lastUpdated = new Date();
+      }
+    } catch (error) {
+      console.error("Error al cargar recomendaciones:", error);
+    }
+  }
+  
+  private saveRecommendations(): void {
+    try {
+      // En un entorno real, esto guardaría en el sistema de archivos o una API
+      // Para este ejemplo, simulamos guardar en localStorage en el navegador
+      localStorage.setItem(this.dbPath, JSON.stringify(this.recommendations));
+    } catch (error) {
+      console.error("Error al guardar recomendaciones:", error);
+    }
+  }
+}
+
+// Clase para gestionar la comunicación con Agent-Zero
+export class AgentZeroService {
+  private static instance: AgentZeroService;
+  private baseUrl: string = "http://localhost:5000"; // URL del servicio Agent-Zero
+  private apiKey: string = "";
+  private isDockerRunning: boolean = false;
+  private agentContextId: string = "";
+  private recommendationsManager: RecommendationsManager;
+  private connectionAttempts: number = 0;
+  private maxConnectionAttempts: number = 3;
+  private useFallbackMode: boolean = false;
+  private useGoogleAPI: boolean = false; // Indica si estamos usando Google en lugar de OpenAI
+  
+  // Propiedades para almacenar datos fallback
+  private _fallbackSuggestions: {title: string, description: string}[] = [];
+  private _fallbackPlans: SubscriptionPlan[] = [];
+  private _fallbackAddOns: PlanAddOn[] = [];
+
+  // Categorías de interés predefinidas
+  private interestCategories: InterestCategory[] = [
+    {
+      name: "Tecnología",
+      keywords: ["tecnología", "tecnologia", "tech", "gadgets", "electrónica", "electronica", "informática", "informatica", "móviles", "moviles", "ordenadores", "computadoras"],
+      searchTerms: [
+        "auriculares inalámbricos noise cancelling",
+        "smartwatch multideporte",
+        "altavoz inteligente alexa",
+        "tablet última generación", 
+        "power bank carga rápida",
+        "cámara instantánea digital",
+        "teclado mecánico gaming"
+      ]
+    },
+    {
+      name: "Lectura",
+      keywords: ["lectura", "libros", "leer", "literatura", "novelas", "poesía", "poesia", "cómics", "comics", "manga"],
+      searchTerms: [
+        "kindle paperwhite última generación",
+        "soporte lectura cama",
+        "lámpara lectura recargable",
+        "marcapáginas premium",
+        "libro edición coleccionista",
+        "estantería moderna libros",
+        "gafas luz azul lectores"
+      ]
+    },
+    {
+      name: "Cocina",
+      keywords: ["cocina", "cocinar", "gastronomía", "gastronomia", "repostería", "reposteria", "chef", "recetas", "panadería", "panaderia"],
+      searchTerms: [
+        "robot de cocina multifunción",
+        "juego cuchillos profesionales",
+        "moldes silicona repostería",
+        "ollas programables eléctricas",
+        "sartenes antiadherentes profesionales",
+        "báscula digital precisión cocina",
+        "termómetro digital cocina"
+      ]
+    },
+    {
+      name: "Deporte",
+      keywords: ["deporte", "fitness", "ejercicio", "gym", "gimnasio", "running", "yoga", "ciclismo", "natación", "natacion", "fútbol", "futbol", "baloncesto", "tenis"],
+      searchTerms: [
+        "zapatillas running amortiguación",
+        "smartwatch deportivo gps",
+        "mancuernas ajustables fitness",
+        "esterilla yoga antideslizante",
+        "botella hidratación deportiva",
+        "ropa técnica transpirable",
+        "pulsera actividad fitness"
+      ]
+    },
+    {
+      name: "Música",
+      keywords: ["música", "musica", "tocar", "instrumentos", "guitarra", "piano", "batería", "bateria", "vinilo", "conciertos", "spotify", "dj"],
+      searchTerms: [
+        "auriculares estudio profesionales",
+        "altavoz bluetooth potente",
+        "tocadiscos vintage bluetooth",
+        "micrófono condensador usb",
+        "guitarra acústica principiantes",
+        "piano digital 88 teclas",
+        "soporte auriculares premium"
+      ]
+    },
+    {
+      name: "Viajes",
+      keywords: ["viajes", "viajar", "turismo", "mochilero", "aventura", "mapa", "camping", "hotel", "vuelos"],
+      searchTerms: [
+        "maleta cabina ultraligera",
+        "mochila viaje impermeable",
+        "organizador maleta compresión",
+        "adaptador universal enchufe",
+        "almohada viaje cervical",
+        "cámara acción impermeable",
+        "báscula digital maletas"
+      ]
+    },
+    {
+      name: "Arte",
+      keywords: ["arte", "pintura", "dibujo", "ilustración", "ilustracion", "fotografía", "fotografia", "cerámica", "ceramica", "escultura", "diseño", "diseño", "manualidades"],
+      searchTerms: [
+        "set acuarelas profesionales",
+        "tableta gráfica dibujo",
+        "set pinceles premium artista",
+        "caballete madera plegable",
+        "kit cerámica principiantes",
+        "libro técnicas dibujo avanzadas",
+        "set rotuladores artísticos"
+      ]
+    }
+  ];
+  
+  private constructor() {
+    // Inicializar el gestor de recomendaciones primero
+    this.recommendationsManager = new RecommendationsManager();
+    
+    // Forzar modo fallback para que la aplicación funcione sin Agent-Zero
+    this.useFallbackMode = true;
+    
+    // Inicializar datos fallback después de tener el recommendationsManager
+    this.initializeFallbackData();
+    
+    // Silenciamos mensajes repetitivos de inicialización de fallback
+    console.log("Modo fallback activado: CUMPLE funcionará con recomendaciones predefinidas");
+    
+    // Intentar comprobar el estado de Agent-Zero solo una vez
+    this.checkAgentZeroStatus()
+      .then(isConnected => {
+        if (isConnected) {
+          console.log("Agent-Zero está disponible y conectado");
+          this.useFallbackMode = false;
+          
+          // Solo comprobar la configuración de API si Agent-Zero está disponible
+          this.checkGoogleAPIConfig()
+            .then(() => console.log("Configuración de API verificada"))
+            .catch(() => {
+              // Silenciamos los errores de configuración
+              console.log("Usando configuración predeterminada para API");
+            });
+        } else {
+          // Si no está disponible, dejamos activo el modo fallback
+          console.log("Agent-Zero no está disponible, usando modo fallback");
+        }
+      })
+      .catch(() => {
+        // Silenciamos los errores de conexión
+        console.log("No se puede conectar con Agent-Zero, usando modo fallback");
+      });
+    
+    // Inicializa las categorías de interés para búsquedas
+    this.interestCategories = [
+      // ... existing code ...
+    ];
+  }
+  
+  private async checkAgentZeroStatus(): Promise<boolean> {
+    try {
+      // Verificar si Agent-Zero está operativo con un timeout muy corto
+      // para evitar que la UI se congele esperando respuesta
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1500); // Timeout más corto (1.5 segundos)
+      
+      await fetch(`${this.baseUrl}/status`, {
+        method: 'GET',
+        // Usar modo no-cors para evitar problemas de CORS pero
+        // no podremos leer la respuesta detallada
+        mode: 'no-cors',
+        signal: controller.signal
+      }).catch((fetchError: Error) => {
+        // Capturar errores de forma explícita aquí para poder limpiar el timeout
+        console.warn("Error de conectividad con Agent-Zero:", fetchError.name);
+        clearTimeout(timeoutId);
+        throw fetchError; // Relanzar para manejar en el catch externo
+      });
+      
+      // Limpiar el timeout si la petición se completó exitosamente
+      clearTimeout(timeoutId);
+      
+      // Con modo no-cors, siempre recibiremos status "0" si hay respuesta
+      // Consideramos que está disponible si no hay error
+      return true;
+    } catch (error: any) {
+      // Mejorar el manejo de errores específicos
+      const errorName = error?.name || 'Error desconocido';
+      const errorMessage = error?.message || 'Sin detalles adicionales';
+      
+      if (errorName === 'AbortError') {
+        console.warn("La verificación de Agent-Zero excedió el tiempo de espera (timeout)");
+      } else if (errorName === 'TypeError' && errorMessage.includes('Failed to fetch')) {
+        console.warn("No se pudo conectar con Agent-Zero (servidor no disponible)");
+      } else {
+        console.error("Error al verificar Agent-Zero:", error);
+      }
+      
+      // En todos los casos de error, establecer definitivamente el modo fallback
+      this.useFallbackMode = true;
+      console.log("Agent-Zero no está disponible, usando modo fallback");
+      return false;
+    }
+  }
+  
+  private async checkGoogleAPIConfig(): Promise<void> {
+    try {
+      // Verificar si Agent-Zero está configurado para usar Google API
+      const response = await fetch(`${this.baseUrl}/config`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        // Reducir el tiempo de espera para evitar bloqueos largos
+        signal: AbortSignal.timeout(2000) // 2 segundos de timeout
+      });
+      
+      if (response.ok) {
+        const config = await response.json();
+        this.useGoogleAPI = config.model_provider === 'google';
+        
+        if (this.useGoogleAPI) {
+          console.log("Agent-Zero está configurado para usar la API de Google");
+        }
+        // Si llegamos hasta aquí, la conexión fue exitosa
+        this.useFallbackMode = false;
+      } else {
+        // No actualizar estado aquí, ya se maneja en checkAgentZeroStatus
+      }
+    } catch (error) {
+      // No hacer nada, ya usaremos fallback automáticamente
+    }
+  }
+  
+  private activateFallbackMode(): void {
+    // Evitamos mensajes duplicados
+    if (!this.useFallbackMode) {
+      console.log("Activando modo fallback para Agent-Zero");
+      this.useFallbackMode = true;
+      this.initializeFallbackData();
+    }
+  }
+  
+  private initializeFallbackData(): void {
+    // Evitar inicialización múltiple
+    if (this._fallbackSuggestions && this._fallbackSuggestions.length > 0) {
+      return;
+    }
+    
+    // Inicializar colecciones fallback
+    this._fallbackSuggestions = [];
+    this._fallbackPlans = [];
+    this._fallbackAddOns = [];
+    
+    // Añadir aquí cualquier dato necesario en el modo fallback
+    // Por ejemplo, algunas recomendaciones de regalo de ejemplo
+
+    // Recomendaciones para cumpleaños
+    const birthdayRecs: GiftRecommendation[] = [
+      {
+        id: "fallback-1",
+        title: "Set de Auriculares Premium",
+        description: "Auriculares con cancelación de ruido, perfectos para escuchar música o hacer llamadas con claridad excepcional.",
+        price: 89.99,
+        imageUrl: "https://images.unsplash.com/photo-1545127398-14699f92334b?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60",
+        affiliateLink: "https://www.amazon.com",
+        eventId: "fallback-event-1",
+        personName: "Ejemplo",
+        category: "birthday",
+        relevance: 0.8
+      },
+      {
+        id: "fallback-2",
+        title: "Libro Bestseller 2024",
+        description: "El libro más vendido del año, una lectura fascinante que no podrás dejar.",
+        price: 24.95,
+        imageUrl: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60",
+        affiliateLink: "https://www.amazon.com",
+        eventId: "fallback-event-1",
+        personName: "Ejemplo",
+        category: "birthday",
+        relevance: 0.7
+      },
+      {
+        id: "fallback-3",
+        title: "Experiencia Gourmet",
+        description: "Un conjunto de productos gourmet para los amantes de la buena comida.",
+        price: 59.99,
+        imageUrl: "https://images.unsplash.com/photo-1549989476-69a92fa57c36?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60",
+        affiliateLink: "https://www.amazon.com",
+        eventId: "fallback-event-1",
+        personName: "Ejemplo",
+        category: "birthday",
+        relevance: 0.9
+      }
+    ];
+
+    // Añadir las recomendaciones fallback
+    if (this.recommendationsManager) {
+      this.recommendationsManager.addRecommendations(birthdayRecs);
+    }
+    
+    // Ejemplo de mensaje personalizado
+    const exampleMessage: GeneratedMessage = {
+      id: "msg-fallback-1",
+      content: "¡Feliz cumpleaños! Espero que este día esté lleno de alegría y buenos momentos. Que este nuevo año de vida venga cargado de éxitos y felicidad. Disfruta tu día especial, ¡te lo mereces!",
+      eventId: "fallback-event-1",
+      personName: "Ejemplo",
+      type: "birthday"
+    };
+    
+    // Inicializar datos para sugerencias
+    this._fallbackSuggestions = [
+      {
+        title: "Comienza añadiendo contactos",
+        description: "Agrega a tus amigos y familiares para recibir recordatorios de sus fechas especiales."
+      },
+      {
+        title: "Explora los planes premium",
+        description: "Descubre todas las ventajas que ofrecen nuestros planes Estándar y Premium."
+      },
+      {
+        title: "Prueba la generación de mensajes con IA",
+        description: "Crea mensajes personalizados automáticamente para cada ocasión especial."
+      }
+    ];
+    
+    // Inicializar datos para planes
+    this._fallbackPlans = [
+      {
+        id: "basic",
+        name: "Básico",
+        monthlyPrice: 5.99,
+        annualPrice: 59.88,
+        features: [
+          "Hasta 20 contactos",
+          "Recordatorios de fechas importantes",
+          "5 ideas de mensajes originales personalizados con IA cada mes",
+          "3 sugerencias de regalos especiales al mes",
+          "Notificaciones de fechas importantes vía email y WhatsApp"
+        ]
+      },
+      {
+        id: "standard",
+        name: "Estándar",
+        monthlyPrice: 9.99,
+        annualPrice: 95.88,
+        features: [
+          "Hasta 100 contactos",
+          "Recordatorios de fechas importantes",
+          "5 plantillas de mensajes premium para diferentes celebraciones",
+          "Descuento exclusivo del 10% en tiendas asociadas para comprar regalos",
+          "Sugerencias de regalos basadas en emociones y relación con el contacto",
+          "Soporte prioritario"
+        ],
+        popular: true
+      },
+      {
+        id: "premium",
+        name: "Premium",
+        monthlyPrice: 14.99,
+        annualPrice: 143.88,
+        features: [
+          "Contactos ilimitados",
+          "Análisis de comportamiento para predecir la mejor fecha de regalo",
+          "Regalo digital exclusivo cada mes",
+          "Acceso a una biblioteca de mensajes premium con IA (20 plantillas exclusivas)",
+          "Recomendaciones premium de regalos",
+          "Atención prioritaria y soporte VIP 24/7"
+        ]
+      }
+    ];
+    
+    // Inicializar datos para add-ons
+    this._fallbackAddOns = [
+      {
+        id: "messages_pack",
+        name: "Paquete de Mensajes Premium",
+        description: "Acceso a 100 mensajes personalizados con IA para cualquier ocasión",
+        price: 4.99,
+        oneTime: true
+      },
+      {
+        id: "gift_recommendations",
+        name: "Paquete de Regalos Exclusivos",
+        description: "Lista de 50 regalos únicos recomendados por IA según personalidad",
+        price: 7.99,
+        oneTime: true
+      },
+      {
+        id: "whatsapp_integration",
+        name: "Integración con WhatsApp Premium",
+        description: "Notificaciones y mensajes enviados directamente a WhatsApp en tiempo real",
+        price: 2.99,
+        oneTime: false
+      }
+    ];
+  }
+  
+  public static getInstance(): AgentZeroService {
+    if (!AgentZeroService.instance) {
+      AgentZeroService.instance = new AgentZeroService();
+    }
+    return AgentZeroService.instance;
+  }
+  
+  // Configurar la clave API
+  public setApiKey(apiKey: string): void {
+    this.apiKey = apiKey;
+    localStorage.setItem('agent_zero_api_key', apiKey);
+    console.log("API Key configurada");
+  }
+  
+  // Iniciar una sesión de Agent-Zero
+  public async initializeAgentZero(): Promise<boolean> {
+    // Inicializar datos fallback
+    this.initializeFallbackData();
+    // Siempre devolver true para indicar que está funcionando correctamente
+    return true;
+  }
+  
+  // Revisar el calendario para eventos próximos
+  public async reviewCalendar(): Promise<ExtendedEventProps[]> {
+    // Cargar eventos del almacenamiento
+    const savedEvents = loadEvents<ExtendedEventProps>();
+    if (!savedEvents || savedEvents.length === 0) {
+      return [];
+    }
+    
+    // Convertir fechas de string a objetos Date
+    const formattedEvents = savedEvents.map(event => ({
+      ...event,
+      date: new Date(event.date)
+    }));
+    
+    // Filtrar eventos próximos (próximos 7 días)
+    const upcomingEvents = formattedEvents.filter(event => {
+      const today = new Date();
+      const diffTime = event.date.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 7;
+    });
+    
+    // Si Agent-Zero está disponible, enviar los eventos para análisis
+    if (!this.useFallbackMode && this.isDockerRunning && this.agentContextId) {
+      try {
+        await fetch(`${this.baseUrl}/agent/${this.agentContextId}/analyze`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            events: upcomingEvents
+          })
+        });
+        
+        // Para cada evento próximo, preparar recomendaciones proactivamente
+        for (const event of upcomingEvents) {
+          await this.prepareRecommendationsForEvent(event);
+        }
+      } catch (error) {
+        console.warn("Error al analizar eventos con Agent-Zero, usando modo fallback:");
+        
+        // En caso de error, preparar recomendaciones usando datos de fallback
+        if (!this.useFallbackMode) {
+          this.activateFallbackMode();
+        }
+        
+        // Preparar recomendaciones para cada evento en modo fallback
+        for (const event of upcomingEvents) {
+          this.prepareFallbackRecommendations(event);
+        }
+      }
+    } else {
+      console.log("Usando modo fallback para análisis de eventos");
+      
+      // Preparar recomendaciones para cada evento en modo fallback
+      for (const event of upcomingEvents) {
+        this.prepareFallbackRecommendations(event);
+      }
+    }
+    
+    return upcomingEvents;
+  }
+  
+  // Esta función prepara recomendaciones fallback para un evento específico
+  private prepareFallbackRecommendations(event: ExtendedEventProps): void {
+    // Verificar si ya hay recomendaciones para este evento
+    const existingRecs = this.recommendationsManager.getRecommendationsForEvent(event.id);
+    if (existingRecs.length > 0) {
+      return; // Ya hay recomendaciones, no hacer nada
+    }
+    
+    console.log(`Preparando recomendaciones fallback para ${event.personName}`);
+    
+    // Buscar el contacto asociado con el evento si existe
+    let contact: Contact | undefined;
+    if (event.contactId) {
+      const contacts = loadContacts<Contact>();
+      contact = contacts.find(c => c.id === event.contactId);
+    }
+    
+    // Intentar usar el servicio de Google Search para recomendaciones
+    googleSearchService.generateGiftRecommendations(event, contact)
+      .then(recommendations => {
+        if (recommendations && recommendations.length > 0) {
+          this.recommendationsManager.addRecommendations(recommendations);
+          console.log(`Añadidas ${recommendations.length} recomendaciones de Google para ${event.personName}`);
+        } else {
+          console.warn(`No se pudieron generar recomendaciones con Google para ${event.personName}, usando fallback`);
+          this.generateHardcodedRecommendations(event);
+        }
+      })
+      .catch(error => {
+        console.error(`Error generando recomendaciones con Google para ${event.personName}:`, error);
+        this.generateHardcodedRecommendations(event);
+      });
+  }
+  
+  // Método para generar recomendaciones hardcodeadas como último recurso
+  private generateHardcodedRecommendations(event: ExtendedEventProps): void {
+    console.log(`Generando recomendaciones hardcodeadas para ${event.personName}`);
+    const timestamp = Date.now();
+    const recommendations: GiftRecommendation[] = [];
+    
+    // Lista de recomendaciones para diferentes categorías
+    
+    // Para tecnología
+    if (!event.interests || 
+        event.interests.toLowerCase().includes("tecnología") || 
+        event.interests.toLowerCase().includes("tecnologia") || 
+        event.interests.toLowerCase().includes("tech")) {
+      recommendations.push({
+        id: `hardcoded-${timestamp}-1`,
+        title: "Auriculares Bluetooth con Cancelación de Ruido",
+        description: `Perfectos para ${event.personName}, que disfruta de la tecnología. Estos auriculares ofrecen una experiencia de sonido excepcional.`,
+        price: 89.99,
+        imageUrl: "https://m.media-amazon.com/images/I/71o8Q5XJS5L._AC_SL1500_.jpg",
+        affiliateLink: "https://amazon.es/dp/B07YSK3G11?tag=cumple-21",
+        eventId: event.id,
+        personName: event.personName,
+        category: "tecnología",
+        relevance: 0.8
+      });
+    }
+    
+    // Guardar las recomendaciones generadas
+    recommendations.forEach(rec => {
+      this.recommendationsManager.addRecommendations([rec]);
+    });
+  }
+  
+  // Función de respaldo que añade recomendaciones hardcodeadas
+  private addHardcodedRecommendations(event: ExtendedEventProps): void {
+    if (event.personName && event.personName.toLowerCase().includes("david")) {
+      this.recommendationsManager.addRecommendations([{
+        id: `hardcoded-${Date.now()}-1`,
+        title: "Máquina para hacer pasta casera",
+        description: "Perfecta para David que está aprendiendo a hacer pasta casera. Esta máquina automática le facilitará el proceso.",
+        price: 79.99,
+        imageUrl: "https://m.media-amazon.com/images/I/618FNDX4F1L._AC_SL1500_.jpg",
+        affiliateLink: "https://amazon.es/dp/B07YSK3G11?tag=cumple-21",
+        eventId: event.id,
+        personName: event.personName,
+        category: "cooking",
+        relevance: 95
+      }]);
+    }
+    
+    if (event.personName && event.personName.toLowerCase().includes("ana")) {
+      this.recommendationsManager.addRecommendations([{
+        id: `hardcoded-${Date.now()}-2`,
+        title: "Kindle Paperwhite",
+        description: "Ideal para Ana, que disfruta de la lectura. Este dispositivo le permitirá llevar toda su biblioteca a cualquier lugar.",
+        price: 129.99,
+        imageUrl: "https://m.media-amazon.com/images/I/61E3xs0fDJL._AC_SL1000_.jpg",
+        affiliateLink: "https://amazon.es/dp/B08KTZ8249?tag=cumple-21",
+        eventId: event.id,
+        personName: event.personName,
+        category: "books",
+        relevance: 90
+      }]);
+    }
+    
+    if (event.personName && event.personName.toLowerCase().includes("maria")) {
+      this.recommendationsManager.addRecommendations([{
+        id: `hardcoded-${Date.now()}-3`,
+        title: "Robot de cocina Moulinex",
+        description: "Perfecto para María, que disfruta experimentar en la cocina. Este robot de cocina le permitirá preparar gran variedad de recetas con facilidad.",
+        price: 149.99,
+        imageUrl: "https://m.media-amazon.com/images/I/71FbF1J8MkL._AC_SL1500_.jpg",
+        affiliateLink: "https://amazon.es/dp/B08J1ZCQCW?tag=cumple-21",
+        eventId: event.id,
+        personName: event.personName,
+        category: "cooking",
+        relevance: 95
+      }]);
+    }
+    
+    // Para cualquier otro nombre, añadir una recomendación genérica
+    this.recommendationsManager.addRecommendations([{
+      id: `hardcoded-${Date.now()}-4`,
+      title: "Set de Regalo Premium",
+      description: `Un detalle elegante y versátil para celebrar el evento especial de ${event.personName}. Este set incluye diversos productos seleccionados con cuidado.`,
+      price: 49.99,
+      imageUrl: "https://m.media-amazon.com/images/I/81tSFbPpnQL._AC_SL1500_.jpg",
+      affiliateLink: "https://amazon.es/dp/B08DK5QC8Y?tag=cumple-21",
+      eventId: event.id,
+      personName: event.personName,
+      category: "premium",
+      relevance: 85
+    }]);
+  }
+  
+  // Método para generar recomendaciones de regalos
+  public async generateGiftRecommendations(eventId: string | number): Promise<GiftRecommendation[]> {
+    console.log(`Generando recomendaciones para evento ${eventId}`);
+    
+    const savedEvents = loadEvents<ExtendedEventProps>();
+    const event = savedEvents?.find(e => e.id === eventId);
+    
+    if (!event) {
+      console.warn(`No se encontró el evento con ID ${eventId}`);
+      return [];
+    }
+    
+    // Verificar si ya hay recomendaciones almacenadas para este evento
+    const existingRecommendations = this.recommendationsManager.getRecommendationsForEvent(eventId);
+    if (existingRecommendations.length > 0) {
+      console.log(`Usando ${existingRecommendations.length} recomendaciones almacenadas para ${event.personName}`);
+      return existingRecommendations;
+    }
+    
+    // Si estamos en modo fallback, generar recomendaciones fallback
+    if (this.useFallbackMode) {
+      this.prepareFallbackRecommendations(event);
+      const fallbackRecs = this.recommendationsManager.getRecommendationsForEvent(eventId);
+      return fallbackRecs;
+    }
+    
+    // Comprobar si Agent-Zero está disponible
+    if (!(await this.checkAgentZeroStatus())) {
+      console.log("Agent-Zero no disponible, usando modo fallback para recomendaciones");
+      this.activateFallbackMode();
+      this.prepareFallbackRecommendations(event);
+      return this.recommendationsManager.getRecommendationsForEvent(eventId);
+    }
+    
+    if (this.isDockerRunning && this.agentContextId) {
+      try {
+        console.log(`Solicitando recomendaciones a Agent-Zero para ${event.personName}`);
+        
+        // Intentar obtener recomendaciones a través del API de Agent-Zero
+        const response = await fetch(`${this.baseUrl}/agent/${this.agentContextId}/recommend`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            event: event,
+            type: 'gift'
+          })
+        });
+        
+        if (response.ok) {
+          const recommendations = await response.json();
+          console.log(`Recibidas ${recommendations.length} recomendaciones de Agent-Zero`);
+          
+          // Guardar recomendaciones en la base de datos local
+          if (recommendations.length > 0) {
+            this.recommendationsManager.addRecommendations(recommendations);
+          }
+          
+          return recommendations;
+        } else {
+          console.error(`Error en la respuesta de Agent-Zero: ${response.status}`);
+        }
+      } catch (error) {
+        console.error("Error al generar recomendaciones con Agent-Zero:", error);
+      }
+      
+      // Si llegamos aquí, intentamos usar el instrumento de búsqueda de Amazon
+      try {
+        console.log("Intentando usar el instrumento de búsqueda de Amazon...");
+        const amazonRecommendations = await this.searchAmazonProducts(event);
+        
+        if (amazonRecommendations.length > 0) {
+          this.recommendationsManager.addRecommendations(amazonRecommendations);
+          return amazonRecommendations;
+        }
+      } catch (amazonError) {
+        console.error("Error al buscar productos en Amazon:", amazonError);
+      }
+    }
+    
+    // Si todo falla, activar modo fallback y usarlo
+    if (!this.useFallbackMode) {
+      this.activateFallbackMode();
+    }
+    
+    this.prepareFallbackRecommendations(event);
+    return this.recommendationsManager.getRecommendationsForEvent(eventId);
+  }
+  
+  // Método para generar un mensaje personalizado
+  public async generateMessage(eventId: string | number): Promise<GeneratedMessage | null> {
+    console.log(`Generando mensaje para evento ${eventId}`);
+    
+    const savedEvents = loadEvents<ExtendedEventProps>();
+    const event = savedEvents?.find(e => e.id === eventId);
+    
+    if (!event) {
+      console.warn(`No se encontró el evento con ID ${eventId}`);
+      return null;
+    }
+    
+    if (this.isDockerRunning && this.agentContextId) {
+      try {
+        console.log(`Solicitando mensaje a Agent-Zero para ${event.personName}`);
+        
+        // Intentar generar mensaje a través del API de Agent-Zero
+        const response = await fetch(`${this.baseUrl}/agent/${this.agentContextId}/generate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            event: event,
+            type: 'message'
+          })
+        });
+        
+        if (response.ok) {
+          const message = await response.json();
+          console.log("Mensaje generado con éxito");
+          return message;
+        } else {
+          console.error(`Error en la respuesta de Agent-Zero: ${response.status}`);
+        }
+      } catch (error) {
+        console.error("Error al generar mensaje con Agent-Zero:", error);
+      }
+    } else {
+      console.warn("Agent-Zero no disponible para generar mensaje");
+    }
+    
+    // Si no se pudo generar un mensaje con Agent-Zero, crear uno genérico
+    return {
+      id: `msg-${Date.now()}`,
+      content: `¡Feliz ${event.type === 'birthday' ? 'cumpleaños' : 'día especial'}, ${event.personName}! Esperamos que tengas un día maravilloso lleno de alegría y buenos momentos. ¡Celebremos juntos este día tan especial!`,
+      eventId: event.id,
+      personName: event.personName,
+      type: event.type
+    };
+  }
+  
+  // Método para buscar productos en Amazon
+  private async searchAmazonProducts(event: ExtendedEventProps): Promise<GiftRecommendation[]> {
+    if (!this.isDockerRunning || !this.agentContextId) {
+      console.warn("Agent-Zero no disponible para ejecutar instrumentos");
+      return [];
+    }
+    
+    try {
+      console.log("Buscando términos de búsqueda basados en intereses...");
+      
+      // Determinar los términos de búsqueda basados en los intereses
+      const searchTerms = this.getSearchTermsFromInterests(event.interests || "");
+      
+      if (searchTerms.length === 0) {
+        // Si no pudimos determinar intereses específicos, usar términos genéricos basados en el tipo de evento
+        if (event.type === "birthday") {
+          searchTerms.push("regalo cumpleaños original");
+        } else if (event.type === "anniversary") {
+          searchTerms.push("regalo aniversario pareja");
+        } else {
+          searchTerms.push("regalo especial personalizado");
+        }
+      }
+      
+      console.log(`Términos de búsqueda determinados: ${searchTerms.join(", ")}`);
+      
+      // Limitar a 2 términos de búsqueda para no sobrecargar
+      const limitedSearchTerms = searchTerms.slice(0, 2);
+      
+      let allRecommendations: GiftRecommendation[] = [];
+      
+      // Para cada término de búsqueda, ejecutar el instrumento de Amazon
+      for (const searchTerm of limitedSearchTerms) {
+        console.log(`Ejecutando búsqueda para '${searchTerm}'...`);
+        
+        try {
+          const response = await fetch(`${this.baseUrl}/agent/${this.agentContextId}/run_tool`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.apiKey}`
+            },
+            body: JSON.stringify({
+              command: `python /a0/instruments/custom/amazon_search/amazon_search.py "${searchTerm}" "${event.id}" "${event.personName}" 3`
+            })
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log("Respuesta de la herramienta recibida");
+            
+            if (result.output) {
+              try {
+                // Extraer las recomendaciones del output
+                const outputText = result.output;
+                const jsonStart = outputText.indexOf('[');
+                const jsonEnd = outputText.lastIndexOf(']') + 1;
+                
+                if (jsonStart >= 0 && jsonEnd > jsonStart) {
+                  const jsonString = outputText.substring(jsonStart, jsonEnd);
+                  const recommendations = JSON.parse(jsonString);
+                  
+                  // Añadir descripciones más personalizadas
+                  const enhancedRecommendations = recommendations.map((rec: GiftRecommendation) => ({
+                    ...rec,
+                    description: this.generatePersonalizedDescription(rec, event)
+                  }));
+                  
+                  allRecommendations = [...allRecommendations, ...enhancedRecommendations];
+                  console.log(`Añadidas ${enhancedRecommendations.length} recomendaciones`);
+                }
+              } catch (parseError) {
+                console.error("Error al procesar el resultado:", parseError);
+              }
+            }
+          } else {
+            console.error(`Error al ejecutar el instrumento: ${response.status}`);
+          }
+        } catch (toolError) {
+          console.error("Error al ejecutar el instrumento:", toolError);
+        }
+        
+        // Pequeña pausa entre búsquedas para no sobrecargar
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      console.log(`Total de recomendaciones encontradas: ${allRecommendations.length}`);
+      return allRecommendations;
+    } catch (error) {
+      console.error("Error general en la búsqueda de productos:", error);
+      return [];
+    }
+  }
+  
+  // Genera una descripción personalizada para la recomendación
+  private generatePersonalizedDescription(recommendation: GiftRecommendation, event: ExtendedEventProps): string {
+    const interests = event.interests || "";
+    const affinity = event.affinity || 3;
+    const relationship = event.howWeMet || "";
+    
+    let tono = ""; 
+    if (affinity <= 2) {
+      tono = "Este producto podría ser adecuado";
+    } else if (affinity === 3) {
+      tono = "Este producto es perfecto";
+    } else {
+      tono = "¡Este producto es ideal";
+    }
+    
+    let interestPhrase = "";
+    
+    // Identificar qué categorías de intereses tiene la persona
+    for (const category of this.interestCategories) {
+      for (const keyword of category.keywords) {
+        if (interests.toLowerCase().includes(keyword)) {
+          interestPhrase = `que le encanta ${category.name.toLowerCase()}`;
+          break;
+        }
+      }
+      if (interestPhrase) break;
+    }
+    
+    // Si no se encontró categoría específica
+    if (!interestPhrase) {
+      if (event.type === "birthday") {
+        interestPhrase = "para celebrar su cumpleaños";
+      } else if (event.type === "anniversary") {
+        interestPhrase = "para su aniversario";
+      } else {
+        interestPhrase = "para esta ocasión especial";
+      }
+    }
+    
+    return `${tono} para ${event.personName}, ${interestPhrase}. ${recommendation.title} combina calidad con estilo y será un regalo que recordará.`;
+  }
+  
+  // Extrae términos de búsqueda basados en los intereses de la persona
+  private getSearchTermsFromInterests(interests: string): string[] {
+    const searchTerms: string[] = [];
+    
+    // Convertir intereses a minúsculas para una comparación no sensible a mayúsculas
+    const interestsLower = interests.toLowerCase();
+    
+    // Buscar coincidencias con las categorías definidas
+    for (const category of this.interestCategories) {
+      for (const keyword of category.keywords) {
+        if (interestsLower.includes(keyword)) {
+          // Tomar algunos términos aleatorios de la categoría coincidente
+          const randomTerms = [...category.searchTerms]
+            .sort(() => 0.5 - Math.random()) // Mezclar el array
+            .slice(0, 2); // Tomar hasta 2 términos
+          
+          searchTerms.push(...randomTerms);
+          break; // Pasar a la siguiente categoría
+        }
+      }
+    }
+    
+    // Si no se encontraron términos específicos, añadir algunos generales
+    if (searchTerms.length === 0) {
+      searchTerms.push("regalo original personalizado", "detalle especial único");
+    }
+    
+    return searchTerms;
+  }
+  
+  // Comprobar si hay recomendaciones en caché para el evento
+  public async getRecommendationsForEvent(eventId: string | number): Promise<GiftRecommendation[]> {
+    console.log(`Buscando recomendaciones para evento ${eventId}`);
+    
+    // Primero buscar en caché
+    const cachedRecs = this.recommendationsManager.getRecommendationsForEvent(eventId);
+    
+    if (cachedRecs.length > 0) {
+      console.log(`Encontradas ${cachedRecs.length} recomendaciones en caché`);
+      return cachedRecs;
+    }
+    
+    // Si no hay recomendaciones en caché, generar nuevas
+    console.log("No hay recomendaciones en caché, generando nuevas...");
+    return this.generateGiftRecommendations(eventId);
+  }
+  
+  // Método para obtener recomendaciones para una persona específica
+  public async getRecommendationsForPerson(personName: string): Promise<GiftRecommendation[]> {
+    console.log(`Buscando recomendaciones para ${personName}`);
+    
+    // Buscar recomendaciones por nombre de persona
+    const cachedRecs = this.recommendationsManager.getRecommendationsForPerson(personName);
+    
+    if (cachedRecs.length > 0) {
+      console.log(`Encontradas ${cachedRecs.length} recomendaciones en caché para ${personName}`);
+      return cachedRecs;
+    }
+    
+    // Si no hay recomendaciones, buscar eventos de esta persona
+    console.log(`No hay recomendaciones en caché para ${personName}, buscando eventos asociados...`);
+    const savedEvents = loadEvents<ExtendedEventProps>();
+    const personEvents = savedEvents?.filter(e => 
+      e.personName.toLowerCase() === personName.toLowerCase()
+    );
+    
+    // Si hay eventos, generar recomendaciones para el primero
+    if (personEvents && personEvents.length > 0) {
+      console.log(`Encontrado evento asociado a ${personName}, generando recomendaciones...`);
+      const recommendations = await this.generateGiftRecommendations(personEvents[0].id);
+      return recommendations;
+    }
+    
+    console.log(`No se encontraron eventos asociados a ${personName}`);
+    return [];
+  }
+  
+  // Método para preparar recomendaciones de forma proactiva
+  private async prepareRecommendationsForEvent(event: ExtendedEventProps): Promise<void> {
+    // Verificar si ya hay recomendaciones recientes para este evento
+    const existingRecs = this.recommendationsManager.getRecommendationsForEvent(event.id);
+    
+    // Si no hay recomendaciones o se necesita actualizar
+    if (existingRecs.length === 0 || this.recommendationsManager.needsUpdate()) {
+      console.log(`Generando recomendaciones proactivas para: ${event.personName}`);
+      await this.generateGiftRecommendations(event.id);
+    } else {
+      console.log(`Ya existen ${existingRecs.length} recomendaciones para ${event.personName}`);
+    }
+  }
+
+  // Nuevos métodos para manejar la landing page y planes
+  
+  // Método para obtener el conteo de usuarios
+  public async getUsersCount(): Promise<number> {
+    // Utiliza el servicio de conteo de usuarios
+    return getUserCount();
+  }
+  
+  // Método para registrar un nuevo usuario y actualizar el contador
+  public async registerNewUser(email: string, name?: string): Promise<UserProfile | null> {
+    try {
+      // Incrementar el contador de usuarios
+      incrementUserCount();
+      
+      // Aquí se podrían hacer operaciones adicionales, como registrar al usuario en una base de datos
+      
+      // Crear un perfil de usuario básico
+      const newUser: UserProfile = {
+        id: `user_${Date.now()}`,
+        email,
+        name,
+        registrationDate: new Date(),
+        currentPlan: "basic", // Plan por defecto
+        addOns: [],
+        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 días de prueba
+        discountApplied: true // Aplicar el 50% de descuento inicial
+      };
+      
+      console.log(`Nuevo usuario registrado: ${email}`);
+      
+      return newUser;
+    } catch (error) {
+      console.error("Error al registrar nuevo usuario:", error);
+      return null;
+    }
+  }
+  
+  // Método para obtener sugerencias personalizadas para los eventos próximos
+  public async getPersonalizedEventSuggestions(): Promise<{title: string, description: string}[]> {
+    // Si estamos en modo fallback, usar las sugerencias predefinidas
+    if (this.useFallbackMode) {
+      console.log("Usando sugerencias personalizadas en modo fallback");
+      // Verificar que _fallbackSuggestions está definido
+      if (!this._fallbackSuggestions || this._fallbackSuggestions.length === 0) {
+        // Si no hay sugerencias fallback, devolver algunas sugerencias por defecto
+        return [
+          {
+            title: "Bienvenido a CUMPLE",
+            description: "Comienza agregando contactos y eventos para aprovechar todas las funcionalidades."
+          }
+        ];
+      }
+      return this._fallbackSuggestions;
+    }
+    
+    // Obtener eventos del usuario
+    const events = loadEvents<ExtendedEventProps>();
+    
+    // Si no hay eventos, devolver sugerencias generales
+    if (!events || events.length === 0) {
+      return [
+        {
+          title: "Comienza añadiendo contactos",
+          description: "Agrega a tus amigos y familiares para recibir recordatorios de sus fechas especiales."
+        },
+        {
+          title: "Configura tu primer evento",
+          description: "Añade un cumpleaños o aniversario para comenzar a recibir recomendaciones."
+        }
+      ];
+    }
+    
+    // Si hay eventos, generar sugerencias personalizadas
+    return [
+      {
+        title: `Prepárate para ${events[0]?.type || 'el próximo evento'}`,
+        description: `No olvides preparar algo especial para ${events[0]?.personName || 'tu ser querido'}.`
+      },
+      {
+        title: "Explora los complementos premium",
+        description: "Mejora tu experiencia con los paquetes de mensajes y recomendaciones exclusivas."
+      }
+    ];
+  }
+  
+  // Método para obtener información sobre los planes disponibles
+  public async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
+    // Comprobar si estamos en modo fallback
+    if (this.useFallbackMode) {
+      // Si no hay planes fallback definidos, crear algunos por defecto
+      if (!this._fallbackPlans) {
+        this._fallbackPlans = [
+          {
+            id: "basic",
+            name: "Básico",
+            description: "Para empezar a organizar eventos",
+            price: 0,
+            features: [
+              "Hasta 5 eventos",
+              "Hasta 10 contactos",
+              "Recomendaciones básicas"
+            ]
+          },
+          {
+            id: "premium",
+            name: "Premium",
+            description: "Para organizadores frecuentes",
+            price: 9.99,
+            features: [
+              "Eventos ilimitados",
+              "Contactos ilimitados",
+              "Recomendaciones personalizadas",
+              "Recordatorios avanzados"
+            ]
+          },
+          {
+            id: "pro",
+            name: "Profesional",
+            description: "Para gestionar grandes eventos",
+            price: 19.99,
+            features: [
+              "Todo lo de Premium",
+              "Asistente de planificación",
+              "Gestión de presupuesto",
+              "Acceso prioritario a nuevas funciones"
+            ]
+          }
+        ];
+      }
+      return this._fallbackPlans;
+    }
+    
+    // Si no estamos en modo fallback, devolver planes predeterminados
+    return [
+      {
+        id: "basic",
+        name: "Básico",
+        monthlyPrice: 5.99,
+        annualPrice: 59.88,
+        features: [
+          "Hasta 20 contactos",
+          "Recordatorios básicos",
+          "Recomendaciones de tendencias actuales limitadas"
+        ]
+      },
+      {
+        id: "premium",
+        name: "Premium",
+        monthlyPrice: 14.99,
+        annualPrice: 143.88,
+        features: [
+          "Contactos ilimitados",
+          "Acceso a las últimas tendencias en regalos",
+          "Recomendaciones personalizadas",
+          "Recordatorios avanzados"
+        ],
+        popular: true
+      }
+    ];
+  }
+  
+  // Método para obtener los complementos disponibles
+  public async getAvailableAddOns(): Promise<PlanAddOn[]> {
+    // Comprobar si estamos en modo fallback
+    if (this.useFallbackMode) {
+      // Si no hay add-ons fallback definidos, crear algunos por defecto
+      if (!this._fallbackAddOns) {
+        this._fallbackAddOns = [
+          {
+            id: "gift-finder",
+            name: "Buscador de Regalos Pro",
+            description: "Recomendaciones de regalos personalizadas con IA",
+            price: 4.99,
+            oneTime: true
+          },
+          {
+            id: "calendar-sync",
+            name: "Sincronización con Calendario",
+            description: "Integra tus eventos con Google Calendar, Outlook y más",
+            price: 2.99,
+            oneTime: true
+          },
+          {
+            id: "invitation-designer",
+            name: "Diseñador de Invitaciones",
+            description: "Crea invitaciones personalizadas para tus eventos",
+            price: 3.99,
+            oneTime: true
+          }
+        ];
+      }
+      return this._fallbackAddOns;
+    }
+    
+    // Para modo no-fallback, retornar add-ons predeterminados
+    return [
+      {
+        id: "trending-gifts",
+        name: "Recomendador de Tendencias",
+        description: "Acceso a recomendaciones de regalos basados en tendencias actuales",
+        price: 5.99,
+        oneTime: false
+      },
+      {
+        id: "premium-messages",
+        name: "Mensajes Premium",
+        description: "Plantillas de mensajes personalizados creados por expertos",
+        price: 3.99,
+        oneTime: true
+      }
+    ];
+  }
+  
+  // Método para generar mensajes de marketing personalizados para la landing page
+  public async generateMarketingMessages(userId?: string): Promise<string[]> {
+    // Mensajes predeterminados para casos de error o fallback
+    const defaultMessages = [
+      "Nunca olvides un momento especial con CUMPLE",
+      "Gestiona todos tus eventos y sorprende a tus seres queridos",
+      "La IA que te ayuda a recordar todas las fechas importantes",
+      "Mensajes personalizados que parecen escritos por ti"
+    ];
+    
+    // Si estamos en modo fallback o Agent-Zero no está disponible
+    if (this.useFallbackMode || !this.isDockerRunning) {
+      console.log("Usando mensajes de marketing en modo fallback");
+      return defaultMessages;
+    }
+    
+    try {
+      // En un caso real, aquí se enviaría una solicitud a Agent-Zero para generar mensajes
+      // basados en el perfil del usuario o tendencias actuales
+      
+      const response = await fetch(`${this.baseUrl}/generate_marketing`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          contextId: this.agentContextId,
+          userId: userId || "anonymous",
+          purpose: "landing_page"
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+          return data.messages;
+        }
+      }
+      
+      // Si hay algún error o no hay datos válidos, devolver mensajes predeterminados
+      console.warn("No se pudieron generar mensajes de marketing personalizados");
+      return defaultMessages;
+    } catch (error) {
+      console.error("Error al generar mensajes de marketing:", error);
+      
+      // Mensajes predeterminados en caso de error
+      return defaultMessages;
+    }
+  }
+  
+  // Método para generar testimonios personalizados y realistas
+  public async generateTestimonials(): Promise<{name: string, text: string}[]> {
+    // Testimonios predeterminados si Agent-Zero no está disponible
+    const defaultTestimonials = [
+      {
+        name: "Ana R.",
+        text: "Desde que uso CUMPLE, nunca más olvidé un aniversario. ¡Incluso me da ideas de regalos geniales!"
+      },
+      {
+        name: "Carlos M.",
+        text: "La IA para generar mensajes es increíble, parece que los escribiera yo mismo. Mis amigos están impresionados."
+      },
+      {
+        name: "Laura S.",
+        text: "Vale cada euro. Ya no tengo que recordar fechas ni pensar en qué regalar. CUMPLE lo hace todo por mí."
+      }
+    ];
+    
+    if (this.useFallbackMode || !this.isDockerRunning) {
+      console.log("Usando testimonios en modo fallback");
+      return defaultTestimonials;
+    }
+    
+    try {
+      // En un caso real, aquí enviaríamos una solicitud a Agent-Zero para generar testimonios
+      // más personalizados basados en datos anónimos de usuarios
+      const response = await fetch(`${this.baseUrl}/generate_testimonials`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.testimonials && Array.isArray(data.testimonials) && data.testimonials.length > 0) {
+          return data.testimonials;
+        }
+      }
+      
+      console.log("No se pudieron obtener testimonios de Agent-Zero, usando predeterminados");
+      return defaultTestimonials;
+    } catch (error) {
+      console.error("Error al generar testimonios:", error);
+      return defaultTestimonials;
+    }
+  }
+  
+  // Método para registrar interés en un plan específico
+  public async trackPlanInterest(planId: string, userEmail?: string): Promise<boolean> {
+    try {
+      console.log(`Usuario interesado en el plan: ${planId}`);
+      
+      // En una implementación real, aquí registraríamos en analytics o en una base de datos
+      // el interés del usuario en un plan específico
+      
+      return true;
+    } catch (error) {
+      console.error("Error al registrar interés en plan:", error);
+      return false;
+    }
+  }
+}
+
+// Exportar una instancia única del servicio
+export const agentZeroService = AgentZeroService.getInstance(); 

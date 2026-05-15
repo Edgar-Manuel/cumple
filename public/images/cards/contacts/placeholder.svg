@@ -1,0 +1,6 @@
+<svg width="400" height="600" viewBox="0 0 400 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="600" fill="#F3F4F6"/>
+  <circle cx="200" cy="180" r="80" fill="#E5E7EB"/>
+  <path d="M200 290 C130 290 80 330 80 390 L80 440 L320 440 L320 390 C320 330 270 290 200 290 Z" fill="#D1D5DB"/>
+  <text x="200" y="500" font-family="Arial" font-size="24" text-anchor="middle" fill="#6B7280">Imagen de Contacto</text>
+</svg> 

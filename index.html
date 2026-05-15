@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cumple - Recomendaciones de Regalos</title>
+    <meta name="description" content="Sistema de recomendación de regalos personalizado" />
+    <meta name="author" content="Cumple App" />
+    <meta property="og:image" content="/og-image.png" />
+    <link rel="icon" href="/favicon.ico" />
+  </head>
+
+  <body>
+    <div id="root">
+      <div style="display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; font-family: Arial, sans-serif;">
+        <div style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="margin-top: 20px;">Cargando aplicación...</p>
+        <style>
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      </div>
+    </div>
+    <noscript>
+      <div style="padding: 20px; text-align: center; font-family: Arial, sans-serif;">
+        <h2>JavaScript desactivado</h2>
+        <p>Esta aplicación necesita JavaScript para funcionar. Por favor, actívalo en tu navegador.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      window.addEventListener('error', function(e) {
+        console.log('Error detectado:', e.message);
+      });
+      setTimeout(function() {
+        const rootEl = document.getElementById('root');
+        if (rootEl && rootEl.childNodes.length <= 1) {
+          console.warn('Posible problema al cargar la aplicación: La app no ha renderizado contenido después de 10 segundos');
+        }
+      }, 10000);
+    </script>
+  </body>
+</html>
