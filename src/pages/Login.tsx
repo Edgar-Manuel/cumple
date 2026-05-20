@@ -25,7 +25,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/lib/AuthContext";
 import { ApiClientError } from "@/lib/apiClient";
-import { incrementUserCount } from "@/services/userCountService";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Correo electrónico inválido" }),
@@ -120,8 +119,6 @@ export default function Login() {
         full_name: values.full_name || undefined,
         password: values.password,
       });
-
-      incrementUserCount();
 
       // Login automático después del registro
       await login({
