@@ -1,6 +1,7 @@
 """Configuración de la aplicación"""
 from pydantic_settings import BaseSettings
 from typing import List
+import secrets
 
 class Settings(BaseSettings):
     """Configuración global de la aplicación"""
@@ -8,7 +9,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://user:password@localhost:5432/cumple_db"
 
     # JWT
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = secrets.token_urlsafe(64)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 

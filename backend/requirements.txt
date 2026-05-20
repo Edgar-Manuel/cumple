@@ -12,8 +12,8 @@ alembic==1.13.1
 pytest==7.4.4
 pytest-asyncio==0.23.3
 python-multipart==0.0.6
-cors==1.0.1
 gunicorn==21.2.0
 google-auth-oauthlib==1.2.0
 google-api-python-client==2.107.0
 openai==1.35.0
+slowapi==0.1.9

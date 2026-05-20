@@ -30,7 +30,7 @@ const loginSchema = z.object({
   email: z.string().email({ message: "Correo electrónico inválido" }),
   password: z
     .string()
-    .min(6, { message: "La contraseña debe tener al menos 6 caracteres" }),
+    .min(8, { message: "La contraseña debe tener al menos 8 caracteres" }),
 });
 
 const signupSchema = z
@@ -43,10 +43,10 @@ const signupSchema = z
     full_name: z.string().optional(),
     password: z
       .string()
-      .min(6, { message: "La contraseña debe tener al menos 6 caracteres" }),
+      .min(8, { message: "La contraseña debe tener al menos 8 caracteres" }),
     confirmPassword: z
       .string()
-      .min(6, { message: "La contraseña debe tener al menos 6 caracteres" }),
+      .min(8, { message: "La contraseña debe tener al menos 8 caracteres" }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Las contraseñas no coinciden",

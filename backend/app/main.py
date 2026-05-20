@@ -1,18 +1,25 @@
 """Aplicación principal FastAPI"""
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.responses import JSONResponse
 from app.config import settings
 from app.database import Base, engine
 from app.routers import auth, contacts, events, gifts, ai
 
-# Crear tablas
+# Crear tablas (solo en desarrollo, usar Alembic en producción)
 Base.metadata.create_all(bind=engine)
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 # Crear aplicación
 app = FastAPI(
     title="CUMPLE API",
     description="API para la plataforma CUMPLE de gestión de cumpleaños",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # Configurar CORS
@@ -23,6 +30,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Manejar errores de rate limiting
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Demasiadas solicitudes. Intenta de nuevo más tarde."},
+    )
 
 # Registrar routers
 app.include_router(auth.router)
@@ -38,7 +53,7 @@ def read_root():
         "message": "CUMPLE API",
         "version": "1.0.0",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
     }
 
 @app.get("/health")
@@ -52,5 +67,5 @@ if __name__ == "__main__":
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=settings.DEBUG
+        reload=settings.DEBUG,
     )
