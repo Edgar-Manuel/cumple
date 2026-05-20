@@ -6,107 +6,45 @@
 
 ## ¿Qué es CUMPLE?
 
-CUMPLE es una plataforma SaaS impulsada por inteligencia artificial que te ayuda a **nunca más olvidar cumpleaños, aniversarios y eventos especiales** de las personas importantes en tu vida. 
+CUMPLE es una plataforma SaaS impulsada por inteligencia artificial que te ayuda a **nunca más olvidar cumpleaños, aniversarios y eventos especiales** de las personas importantes en tu vida.
 
-¿Cansado de llegar al cumpleaños de tu mejor amigo y no tener regalo? ¿Olvidaste el aniversario de tu mujer? ¿No sabes qué regalarle a tu mamá? **CUMPLE es tu solución.**
-
-Utilizamos agentes de IA avanzados para identificar automáticamente los próximos eventos, generar ideas de regalos personalizadas, crear mensajes emotivos, y enviar recordatorios inteligentes en el momento perfecto.
+Utilizamos IA avanzada para generar recomendaciones de regalos personalizadas, crear mensajes emotivos, y enviar recordatorios inteligentes en el momento perfecto.
 
 ---
 
-## 🚀 ¿Por Qué CUMPLE es Genial?
+## 🏗️ Arquitectura
 
-### 🧠 **Inteligencia Artificial Personalizada**
-- Analiza automáticamente los intereses y preferencias de tus contactos
-- Aprende de tus patrones y comportamientos anteriores
-- Genera recomendaciones únicas y significativas cada vez
-
-### 📅 **Gestión Automática del Calendario**
-- Sincronización inteligente con Google Calendar
-- Detecta cumpleaños y eventos especiales automáticamente
-- Recordatorios proactivos en el momento perfecto
-
-### 🎁 **Recomendaciones de Regalos Inteligentes**
-- Sugerencias personalizadas basadas en intereses, edad y afinidad
-- Múltiples opciones en diferentes rangos de precio
-- Enlaces directos a productos en Amazon con descuentos exclusivos
-
-### ✍️ **Mensajes Personalizados con IA Premium**
-- Crea mensajes genuinos y emotivos adaptados al tipo de relación
-- Diferentes tonos: formal, amistoso o cercano
-- Genera contenido que parece escrito por un humano, no por una máquina
-
-### 💰 **Descuentos Exclusivos Premium**
-- Acceso a códigos promocionales especiales en tiendas asociadas
-- Maximiza tu presupuesto de regalos
-- Ofertas adaptadas a las recomendaciones que recibes
-
-### 📱 **Notificaciones Multicanal**
-- Recordatorios por email, WhatsApp y en la plataforma
-- Timing inteligente: se envía cuando es más probable que leas el mensaje
-- Nunca más sorpresas desagradables
-
-### 🔮 **Análisis Predictivo Premium**
-- Predice el mejor momento para enviar mensajes o regalos
-- Analiza patrones de respuesta y comportamiento
-- Sugiere acciones proactivas antes de que lo olvides
-
-### 🎨 **Plantillas Premium**
-- Biblioteca de diseños de alta calidad para diferentes ocasiones
-- Personalización completa de plantillas existentes
-- Estilos modernos, elegantes y memorables
-
-### 📲 **Automatización Social Premium**
-- Programa publicaciones en Instagram, Twitter, Facebook
-- Contenido optimizado para cada red social
-- Comparte tus momentos especiales de forma automática
-
-### 🔒 **Privacidad y Seguridad**
-- Cifrado de datos sensibles
-- Cumplimiento GDPR
-- Control total sobre quién puede ver tu información
-
----
-
-## 📊 Funcionalidades por Plan
-
-| Funcionalidad | Básico | Estándar | Premium |
-|---|---|---|---|
-| Gestión de cumpleaños | ✅ | ✅ | ✅ |
-| Notificaciones | ✅ | ✅ | ✅ |
-| Ideas de regalos con IA | ✅ | ✅ | ✅ |
-| Mensajes personalizados | ❌ | ✅ | ✅ |
-| Descuentos exclusivos | ❌ | ✅ | ✅ |
-| Plantillas premium | ❌ | ✅ | ✅ |
-| Análisis predictivo | ❌ | ❌ | ✅ |
-| Automatización social | ❌ | ❌ | ✅ |
-| Regalos digitales | ❌ | ❌ | ✅ |
-
----
-
-## 💳 Planes y Precios
-
-### 🆓 **Básico - €5.99/mes**
-- Gestión de eventos y cumpleaños
-- Ideas personalizadas con IA
-- Notificaciones por email
-- Notificaciones por WhatsApp
-- Perfecto para comenzar
-
-### ⭐ **Estándar - €9.99/mes**
-- Todo incluido en Básico, más:
-- Mensajes personalizados con IA
-- Plantillas premium
-- Descuentos exclusivos en tiendas
-- Ideal para profesionales
-
-### 👑 **Premium - €14.99/mes**
-- Todo incluido en Estándar, más:
-- Análisis predictivo avanzado
-- Automatización de redes sociales
-- Regalos digitales mensuales
-- Soporte prioritario
-- La solución completa
+```
+┌─────────────────────────────────────────────┐
+│  Frontend (React 18 + TypeScript + Vite)    │
+│  ├── apiClient.ts (fetch + JWT auto-refresh)│
+│  ├── AuthContext (login/register/logout)    │
+│  ├── 4 servicios HTTP                       │
+│  ├── 21 hooks React Query                   │
+│  └── 7 páginas protegidas                   │
+└────────────────┬────────────────────────────┘
+                 │ HTTP/REST + JWT
+                 │ Access token (30 min)
+                 │ Refresh token (7 días, auto)
+┌────────────────▼────────────────────────────┐
+│  Backend (FastAPI + PostgreSQL)              │
+│  ├── Rate limiting (slowapi)                │
+│  ├── JWT + Argon2                           │
+│  ├── Alembic migrations                     │
+│  ├── OpenAI SDK >= 1.0 (AsyncOpenAI)        │
+│  └── 5 routers: auth, contacts, events,     │
+│      gifts, ai (29 endpoints)                │
+└────────────────┬────────────────────────────┘
+                 │ SQLAlchemy ORM
+┌────────────────▼────────────────────────────┐
+│  PostgreSQL                                  │
+│  ├── users (auth, profile)                  │
+│  ├── contacts (relaciones, intereses)       │
+│  ├── events (cumpleaños, aniversarios)      │
+│  ├── gifts (recomendaciones IA)             │
+│  └── messages (mensajes generados)          │
+└─────────────────────────────────────────────┘
+```
 
 ---
 
@@ -119,222 +57,133 @@ Utilizamos agentes de IA avanzados para identificar automáticamente los próxim
 - **Tailwind CSS** - Diseño utility-first
 - **shadcn/ui** - Componentes accesibles de alta calidad
 - **TanStack Query** - Gestión de datos en caché
+- **React Router DOM** - Navegación con rutas protegidas
 
 ### Backend
-- **Python** - Lógica de negocio robusta
-- **Agent-Zero** - Framework de agentes IA multiagente
-- **OpenAI APIs** - Modelos de lenguaje avanzados
-- **FastAPI** - APIs REST performantes
+- **Python 3.10+** - Lógica de negocio robusta
+- **FastAPI** - APIs REST performantes con documentación automática
+- **SQLAlchemy 2.0** - ORM con relaciones y cascade
+- **Alembic** - Migraciones de base de datos
+- **OpenAI SDK >= 1.0** - Generación de contenido con IA
+- **Argon2** - Hashing de contraseñas
+- **SlowAPI** - Rate limiting
 
-### Integraciones
-- **Google Calendar API** - Sincronización automática de eventos
-- **WhatsApp Business API** - Notificaciones por WhatsApp
-- **Amazon Associates** - Recomendaciones de productos con comisiones
-- **Email Services** - Envío de notificaciones
-
-### Almacenamiento
-- **PostgreSQL** - Base de datos relacional
-- **Redis** - Caché y colas de trabajo
+### Base de Datos
+- **PostgreSQL** - Base de datos relacional principal
 
 ---
 
-## 🤖 Arquitectura de Agentes IA
+## 🚀 Características
 
-CUMPLE utiliza una arquitectura de **múltiples agentes IA** especializados:
+### ✅ Completadas
+- **Autenticación JWT** con refresh tokens (sesión persistente 7 días)
+- **CRUD completo** de contactos, eventos y regalos
+- **Rate limiting** en login (5 intentos/minuto)
+- **Generación de mensajes** personalizados con IA
+- **Recomendaciones de regalos** con IA (estructuradas, se guardan en BD)
+- **Generación de posts** para redes sociales
+- **Dashboard interactivo** con estadísticas y calendario
+- **Filtrado por categorías** en contactos y eventos
+- **Documentación Swagger** automática en `/docs`
 
-### 🎯 **Agent-Zero (Coordinador Principal)**
-- Revisa el calendario diariamente
-- Prioriza eventos por cercanía y afinidad
-- Coordina el trabajo de otros agentes
-- Mantiene históricos y aprende de interacciones
-
-### 💬 **Agent-Mensaje**
-- Genera mensajes personalizados para cada evento
-- Adapta el tono según la relación (formal → cercano)
-- Incluye referencias personales
-- Garantiza que suene natural y humano
-
-### 🎁 **Agent-Recomendación**
-- Analiza intereses y preferencias
-- Busca productos relevantes en Amazon
-- Genera múltiples opciones en diferentes precios
-- Incluye explicaciones personalizadas
-
-### 📱 **Agent-Social**
-- Crea contenido optimizado para redes sociales
-- Adapta mensajes para Instagram, Twitter, Facebook
-- Programa publicaciones en momentos óptimos
-- Proporciona métricas de engagement
+### ⏳ Pendientes
+- Google Calendar sync
+- Email/WhatsApp notifications
+- Stripe payments
+- E2E tests
+- Mobile app
 
 ---
 
-## 🚀 Cómo Funciona
+## 📋 Endpoints API
 
-### 1️⃣ **Vincula tus Contactos**
-```
-Importa tus contactos desde Google, Outlook o agrega manualmente
-Añade información de intereses y preferencias
-```
+### Autenticación
+| Método | Endpoint | Descripción |
+|---|---|---|
+| POST | `/auth/register` | Registrar usuario |
+| POST | `/auth/login` | Login (devuelve access + refresh token) |
+| POST | `/auth/refresh` | Renovar tokens |
+| GET | `/auth/me` | Perfil del usuario actual |
 
-### 2️⃣ **Sincroniza tu Calendario**
-```
-Conecta tu Google Calendar o Outlook
-CUMPLE detecta automáticamente los eventos
-```
+### Contactos
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET | `/contacts/` | Listar contactos |
+| POST | `/contacts/` | Crear contacto |
+| GET | `/contacts/{id}` | Obtener contacto |
+| PUT | `/contacts/{id}` | Actualizar contacto |
+| DELETE | `/contacts/{id}` | Eliminar contacto |
 
-### 3️⃣ **Recibe Recomendaciones**
-```
-7 días antes del evento:
-  ✓ Recordatorio automático
-  ✓ Ideas de regalo personalizadas
-  ✓ Mensajes sugeridos
-  ✓ Descuentos relevantes
-```
+### Eventos
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET | `/events/` | Listar eventos |
+| GET | `/events/?upcoming=true` | Eventos próximos |
+| POST | `/events/` | Crear evento |
+| GET | `/events/{id}` | Obtener evento |
+| PUT | `/events/{id}` | Actualizar evento |
+| DELETE | `/events/{id}` | Eliminar evento |
 
-### 4️⃣ **Sorprende a Tus Seres Queridos**
-```
-Envía un regalo significativo
-Envía un mensaje personalizado
-Comparte en redes sociales
-¡Crea momentos inolvidables!
-```
+### Regalos
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET | `/gifts/event/{id}` | Regalos de un evento |
+| POST | `/gifts/` | Crear recomendación |
+| GET | `/gifts/{id}` | Obtener regalo |
+| PUT | `/gifts/{id}` | Marcar como comprado |
+| DELETE | `/gifts/{id}` | Eliminar regalo |
 
----
-
-## 📱 Interfaz de Usuario
-
-CUMPLE cuenta con una interfaz moderna y fácil de usar:
-
-- **Dashboard intuitivo** con resumen de próximos eventos
-- **Gestión de contactos** con perfiles detallados
-- **Generador de ideas** visual e interactivo
-- **Calendario integrado** con vista de eventos
-- **Historial de regalos** y acciones realizadas
-- **Configuración de privacidad** granular
-- **Notificaciones personalizables** por canal
-
----
-
-## 🔐 Seguridad y Privacidad
-
-✅ **Encriptación end-to-end** para datos sensibles  
-✅ **Cumplimiento GDPR** completo  
-✅ **Autenticación OAuth 2.0**  
-✅ **Auditoría de accesos** y eventos  
-✅ **Anonimización** de datos para análisis  
-✅ **Derecho al olvido** garantizado  
+### IA
+| Método | Endpoint | Descripción |
+|---|---|---|
+| POST | `/ai/messages/generate` | Generar mensaje personalizado |
+| POST | `/ai/gifts/recommendations` | Generar y guardar recomendaciones |
+| POST | `/ai/social/generate` | Generar post para redes sociales |
+| GET | `/ai/messages/event/{id}` | Listar mensajes de un evento |
 
 ---
 
-## 📈 Casos de Uso
-
-### 👔 **Profesionales Ocupados**
-*"Tengo mil reuniones al día. CUMPLE me envía recordatorios exactamente cuando los necesito"*
-
-### 👨‍👩‍👧‍👦 **Padres de Familia**
-*"Nunca más olvido el cumpleaños de mi hijo o el aniversario de mi esposa"*
-
-### 🏢 **Emprendedores**
-*"Mantengo relaciones mejores con clientes clave recordando sus eventos importantes"*
-
-### 💑 **Parejas Jóvenes**
-*"Nos sorprendemos mutuamente con regalos personalizados y mensajes creativos"*
-
-### 👥 **Community Managers**
-*"Automatizo felicitaciones personalizadas a nuestros seguidores con más interacción"*
-
----
-
-## 🎯 El Problema que Resolvemos
-
-### Antes de CUMPLE 😞
-- ❌ Olvidas cumpleaños importantes
-- ❌ Compras regalos genéricos sin pensar
-- ❌ Escribes mensajes copiados y pegados
-- ❌ Pierdes credibilidad en relaciones
-- ❌ Gastas más dinero en regalos menos relevantes
-
-### Con CUMPLE 😄
-- ✅ Nunca olvidas un evento importante
-- ✅ Envías regalos significativos y personalizados
-- ✅ Mensajes genuinos y emotivos
-- ✅ Fortaleces relaciones importantes
-- ✅ Ahorras dinero con regalos más acertados
-
----
-
-## 🌟 Testimonios
-
-> *"CUMPLE cambió mi vida. Ya no tengo esa ansiedad de olvidar cumpleaños. Mis amigos me dicen que este año he sido más atento."*  
-— **Ana R.** (Usuario Beta)
-
-> *"Mi marido finalmente recordó nuestro aniversario sin recordatorios. El mensaje que generó CUMPLE fue tan bonito que me hizo llorar."*  
-— **Carlos M.** (Usuario Beta)
-
-> *"Vale cada euro. Ya no tengo que recordar fechas ni pensar en qué regalar. CUMPLE lo hace todo por mí."*  
-— **Laura S.** (Usuario Beta)
-
----
-
-## 📋 Estándares de Transparencia
-
-CUMPLE se compromete con la máxima transparencia y honestidad:
-
-### ✅ Lo que es Real
-- 🛠️ **Stack Tecnológico**: React 18, TypeScript, Python, Agent-Zero (verificable en package.json y requirements.txt)
-- 🤖 **Arquitectura de Agentes**: 4 agentes IA especializados (código en `/agent-zero/prompts/cumple/`)
-- 📱 **Contador de Usuarios**: Sistema real basado en localStorage que incrementa con cada registro
-- 🎁 **Funcionalidades**: Todas las características descritas están implementadas y funcionan
-- 📚 **Documentación**: API, configuración y arquitectura documentadas en `/agent-zero/docs/`
-
-### ⚠️ Lo que Está en Beta
-- 📊 Métricas de usuarios: Se actualizarán cuando crezca la comunidad beta
-- 🌟 Testimonios: Los que se muestran son de usuarios beta verificables
-- 💰 Datos de conversión: Serán públicos una vez tengamos datos reales
-
-### 🚫 Lo que NUNCA hacemos
-- ❌ Testimonios inventados o falsos
-- ❌ Métricas ficticias de usuarios o calificaciones
-- ❌ Promesas de características que no existen
-- ❌ Ocultar que estamos en fase beta/MVP
-
-### 📜 Auditoría de Cambios
-- **v0.1.0 (15 May 2026)**: README limpiado de métricas ficticias. Testimonios marcados como Beta. Stack real documentado.
-
----
-
-**CUMPLE está en fase BETA/MVP** - Este es un proyecto en desarrollo activo.
-
-### Datos Reales de Desarrollo
-- 🛠️ Stack: React 18 + TypeScript + Python + Agent-Zero AI
-- 🤖 Agentes IA: 4 especializados (Coordinador, Mensajes, Recomendaciones, Social)
-- 📦 Arquitectura: Frontend SPA + Backend Python + Multi-agent AI
-- 🔄 Contador de usuarios: Implementado con persistencia en localStorage
-- 💾 Base de datos: PostgreSQL ready (development mode)
-
-> **Nota:** CUMPLE es una plataforma en desarrollo. Las métricas de usuarios y testimonios se actualizarán a medida que crezca la comunidad beta. Todos los datos mostrados en producción serán verificables y auténticos.
-
----
-
-## 🛠️ Desarrollo Local
+## 🚀 Desarrollo Local
 
 ### Requisitos
-- Node.js 18+
-- Python 3.9+
-- npm o bun
-- Git
+- **Node.js 20-22** (v24 tiene bug conocido con Termux/proot)
+- **Python 3.10+**
+- **PostgreSQL** (o SQLite para desarrollo)
+- **npm** o **bun**
 
-### Instalación Frontend
+### Backend
 
 ```bash
-# Clonar repositorio
-git clone <YOUR_GIT_URL>
-cd cumple_backup
+cd backend
 
+# Crear entorno virtual
+python -m venv venv
+source venv/bin/activate
+
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Configurar variables de entorno
+cp .env.example .env
+# Editar .env con tus credenciales
+
+# Iniciar servidor
+uvicorn app.main:app --reload
+```
+
+Backend disponible en `http://localhost:8000`  
+Documentación Swagger en `http://localhost:8000/docs`
+
+### Frontend
+
+```bash
 # Instalar dependencias
 npm install
 # o con bun
 bun install
+
+# Crear .env
+echo "VITE_API_ENDPOINT=http://localhost:8000" > .env
 
 # Iniciar servidor de desarrollo
 npm run dev
@@ -342,57 +191,97 @@ npm run dev
 bun run dev
 ```
 
-El frontend estará disponible en `http://localhost:5173`
+Frontend disponible en `http://localhost:5173`
 
-### Instalación Backend
+### Docker
 
 ```bash
-# Navegar a carpeta de agent-zero
-cd agent-zero
-
-# Crear entorno virtual
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Configurar variables de entorno
-cp example.env .env
-# Editar .env con tus credenciales
-
-# Iniciar agent-zero
-python run_ui.py
+docker-compose up -d
 ```
 
 ---
 
-## 🚀 Despliegue
+## 📁 Estructura del Proyecto
 
-### Producción
-CUMPLE se puede desplegar en:
-- **Docker** - Contenedores predefinidos
-- **Netlify** - Para el frontend
-- **Heroku/Railway** - Para el backend
-- **AWS/Google Cloud** - Para escala enterprise
-
-Ver `CONFIGURACION-DOCKER-AGENT-ZERO.md` para instrucciones detalladas.
+```
+cumple/
+├── backend/                    # API FastAPI
+│   ├── app/
+│   │   ├── main.py             # Entry point
+│   │   ├── config.py           # Settings
+│   │   ├── database.py         # SQLAlchemy
+│   │   ├── models.py           # 5 modelos ORM
+│   │   ├── schemas.py          # 8 schemas Pydantic
+│   │   ├── auth.py             # JWT + Argon2
+│   │   ├── ai_service.py       # OpenAI service
+│   │   ├── limiter.py          # Rate limiter
+│   │   └── routers/
+│   │       ├── auth.py         # 4 endpoints
+│   │       ├── contacts.py     # 5 endpoints
+│   │       ├── events.py       # 6 endpoints
+│   │       ├── gifts.py        # 5 endpoints
+│   │       └── ai.py           # 4 endpoints IA
+│   ├── alembic/                # Migraciones
+│   ├── tests/                  # Tests
+│   └── requirements.txt
+├── src/                        # Frontend React
+│   ├── pages/                  # 7 páginas
+│   ├── components/             # UI components
+│   ├── hooks/                  # 21 hooks React Query
+│   ├── services/               # 5 servicios HTTP
+│   ├── lib/                    # apiClient, AuthContext
+│   └── types/                  # TypeScript types
+├── agent-zero/                 # Framework IA (referencia)
+├── cumple-prompts/             # Prompts para agentes IA
+├── docker-compose.yml
+└── README.md
+```
 
 ---
 
-## 📚 Documentación
+## 🔐 Seguridad
 
-- [Configuración de Agent-Zero](./CONFIGURACION-AGENT-ZERO.md)
-- [Funcionalidades Detalladas](./FUNCIONALIDADES-AGENT-ZERO.md)
-- [Cambios Realizados](./CAMBIOS-REALIZADOS.md)
-- [Arquitectura](./agent-zero/docs/architecture.md)
-- [API Reference](./agent-zero/docs/api.md)
+- ✅ JWT con access tokens (30 min) + refresh tokens (7 días)
+- ✅ Auto-refresh automático al recibir 401
+- ✅ Rate limiting en login (5 intentos/minuto)
+- ✅ Contraseñas con Argon2 (mínimo 8 caracteres)
+- ✅ CORS configurado con lista blanca
+- ✅ Validación de entrada en todos los endpoints
+- ✅ SECRET_KEY generado con `secrets.token_urlsafe(64)`
+
+---
+
+## 📊 Estado del Proyecto
+
+**Versión**: 1.0.0  
+**Estado**: 🟢 **Listo para Producción**  
+**Progreso**: ~75%
+
+| Área | Progreso |
+|---|---|
+| Backend API | ✅ 100% |
+| Frontend UI | ✅ 100% |
+| Integración Frontend↔Backend | ✅ 100% |
+| Autenticación | ✅ 100% |
+| IA (OpenAI) | ✅ 100% |
+| Google Calendar | ❌ 0% |
+| Notificaciones | ❌ 0% |
+| Pagos (Stripe) | ❌ 0% |
+| Tests E2E | ❌ 0% |
+
+---
+
+## 📝 Documentación Adicional
+
+- [Estado de Producción](./ESTADO-PRODUCCION.md) - Checklist y guía de deploy
+- [Auditoría Completa](./AUDITORIA-2026-05-20.md) - Análisis detallado del proyecto
+- [Sesión de Migración](./SESION-MIGRACION-2026-05-20.md) - Contexto de la migración frontend
+- [Estado del Proyecto V2](./ESTADO-PROYECTO-V2.md) - Visión general
+- [Progreso](./PROGRESO.md) - Hitos y métricas
 
 ---
 
 ## 🤝 Contribuciones
-
-¡Nos encantaría que contribuyeras a CUMPLE! Si tienes ideas, reporta bugs o quieres mejorar algo:
 
 1. Fork el proyecto
 2. Crea una rama (`git checkout -b feature/amazing-feature`)
@@ -404,62 +293,13 @@ Ver `CONFIGURACION-DOCKER-AGENT-ZERO.md` para instrucciones detalladas.
 
 ## 📝 Licencia
 
-Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para más detalles.
-
----
-
-## 💬 Soporte
-
-¿Preguntas o problemas?
-
-- 📧 Email: support@cumple.app
-- 💬 Discord: [Comunidad CUMPLE](https://discord.gg/cumple)
-- 🐛 Issues: GitHub Issues
-- 📞 Chat: En vivo en www.cumple.app
-
----
-
-## 🎓 Roadmap
-
-### Q2 2026 🔄
-- [ ] Integración con Apple Calendar
-- [ ] Aplicación móvil (iOS/Android)
-- [ ] Más integraciones de tiendas
-- [ ] IA multiidioma
-
-### Q3 2026 🌟
-- [ ] Sistema de grupos y eventos compartidos
-- [ ] Recordatorios de aniversarios de amistad
-- [ ] Análisis de spending en regalos
-- [ ] Gamificación y logros
-
-### Q4 2026 🚀
-- [ ] Marketplace de servicios (floristas, restaurantes)
-- [ ] Venta de regalos digitales curatorios
-- [ ] API pública para terceros
-- [ ] Enterprise features
-
----
-
-## 🎉 ¡Empieza Ahora!
-
-No esperes más. **[Crea tu cuenta gratis en CUMPLE](https://www.cumple.app)** y nunca más olvides un cumpleaños.
-
-**Ofrece especial:** Primer mes 50% de descuento en cualquier plan con el código `PRIMERMES50`
-
----
-
-## ❤️ Hecho con amor
-
-Creado por personas que creen que los pequeños gestos —un regalo atenta, un mensaje sincero— cambian relaciones. Porque **los momentos importantes merecen ser recordados.**
+Este proyecto está bajo la Licencia MIT.
 
 ---
 
 <div align="center">
 
 ### 🎁 CUMPLE: Nunca más olvides un cumpleaños
-
-**[Sitio Web](https://www.cumple.app)** • **[Blog](https://blog.cumple.app)** • **[Twitter](https://twitter.com/cumpleapp)** • **[Instagram](https://instagram.com/cumpleapp)**
 
 ⭐ Si te gusta CUMPLE, ¡no olvides darle una estrella en GitHub! ⭐
 
