@@ -1,4 +1,5 @@
 """Aplicación principal FastAPI"""
+import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
@@ -9,8 +10,10 @@ from app.config import settings
 from app.database import Base, engine
 from app.routers import auth, contacts, events, gifts, ai
 
-# Crear tablas (solo en desarrollo, usar Alembic en producción)
-Base.metadata.create_all(bind=engine)
+# Inicializar tablas solo si no hay migraciones configuradas
+# En producción, usar: alembic upgrade head
+if not os.getenv("SKIP_DB_INIT"):
+    Base.metadata.create_all(bind=engine)
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)

@@ -1,13 +1,14 @@
-.PHONY: help install dev test lint format migrate
+.PHONY: help install dev test migrate db-migrate docker-build docker-run
 
 help:
 	@echo "Comandos disponibles:"
-	@echo "  make install    - Instalar dependencias"
-	@echo "  make dev        - Ejecutar en modo desarrollo"
-	@echo "  make test       - Ejecutar tests"
-	@echo "  make lint       - Ejecutar linter"
-	@echo "  make format     - Formatear código"
-	@echo "  make migrate    - Ejecutar migraciones"
+	@echo "  make install     - Instalar dependencias"
+	@echo "  make dev         - Ejecutar en modo desarrollo"
+	@echo "  make test        - Ejecutar tests"
+	@echo "  make migrate     - Ejecutar migraciones pendientes"
+	@echo "  make db-migrate  - Crear nueva migración (msg='descripción')"
+	@echo "  make docker-build - Construir imagen Docker"
+	@echo "  make docker-run   - Ejecutar contenedor"
 
 install:
 	pip install -r requirements.txt
@@ -16,20 +17,10 @@ dev:
 	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 test:
-	pytest --cov=app -v
-
-lint:
-	flake8 app tests
-	pylint app tests
-
-format:
-	black app tests
+	pytest -v
 
 migrate:
 	alembic upgrade head
-
-db-init:
-	alembic init -t async alembic
 
 db-migrate:
 	alembic revision --autogenerate -m "$(msg)"
