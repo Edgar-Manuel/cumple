@@ -1,6 +1,6 @@
 /**
  * Cliente HTTP para comunicación con el Backend API
- * Maneja autenticación JWT automáticamente
+ * Maneja autenticación JWT con refresh automático
  */
 
 import type { ApiError } from "@/types/api";
@@ -8,20 +8,28 @@ import type { ApiError } from "@/types/api";
 const API_BASE_URL =
   import.meta.env.VITE_API_ENDPOINT || "http://localhost:8000";
 
-const TOKEN_KEY = "cumple_access_token";
+const ACCESS_TOKEN_KEY = "cumple_access_token";
+const REFRESH_TOKEN_KEY = "cumple_refresh_token";
+
+let refreshPromise: Promise<void> | null = null;
 
 /**
- * Gestión del token JWT
+ * Gestión de tokens JWT
  */
 export const tokenStorage = {
-  get(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+  getAccess(): string | null {
+    return localStorage.getItem(ACCESS_TOKEN_KEY);
   },
-  set(token: string): void {
-    localStorage.setItem(TOKEN_KEY, token);
+  getRefresh(): string | null {
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  },
+  set(access: string, refresh: string): void {
+    localStorage.setItem(ACCESS_TOKEN_KEY, access);
+    localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
   },
   clear(): void {
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
   },
 };
 
@@ -41,14 +49,50 @@ export class ApiClientError extends Error {
 }
 
 /**
+ * Refresca el access token usando el refresh token
+ */
+async function refreshAccessToken(): Promise<void> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refreshToken = tokenStorage.getRefresh();
+    if (!refreshToken) {
+      tokenStorage.clear();
+      throw new ApiClientError("Sin sesión", 401, "No refresh token");
+    }
+
+    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      tokenStorage.clear();
+      throw new ApiClientError("Sesión expirada", 401, "Refresh failed");
+    }
+
+    const data = await response.json();
+    tokenStorage.set(data.access_token, data.refresh_token);
+  })();
+
+  try {
+    await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
+/**
  * Realiza una llamada HTTP a la API
  */
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retried = false
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const token = tokenStorage.get();
+  const token = tokenStorage.getAccess();
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -65,7 +109,7 @@ async function request<T>(
       ...options,
       headers,
     });
-  } catch (error) {
+  } catch {
     throw new ApiClientError(
       "Error de conexión con el servidor",
       0,
@@ -73,17 +117,17 @@ async function request<T>(
     );
   }
 
-  // Manejar 401 - Token inválido o expirado
-  if (response.status === 401) {
-    tokenStorage.clear();
-    throw new ApiClientError(
-      "Sesión expirada",
-      401,
-      "Unauthorized"
-    );
+  // Si 401 y no hemos reintentado, intentar refresh
+  if (response.status === 401 && !retried && tokenStorage.getRefresh()) {
+    try {
+      await refreshAccessToken();
+    } catch {
+      throw new ApiClientError("Sesión expirada", 401, "Unauthorized");
+    }
+    // Reintentar con el nuevo token
+    return request<T>(endpoint, options, true);
   }
 
-  // Si la respuesta no tiene contenido (204)
   if (response.status === 204) {
     return {} as T;
   }

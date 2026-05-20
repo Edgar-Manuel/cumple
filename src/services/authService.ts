@@ -18,11 +18,11 @@ export const authService = {
   },
 
   /**
-   * Login - guarda el token automáticamente
+   * Login - guarda access y refresh tokens
    */
   async login(data: UserLogin): Promise<AuthToken> {
     const token = await apiClient.post<AuthToken>("/auth/login", data);
-    tokenStorage.set(token.access_token);
+    tokenStorage.set(token.access_token, token.refresh_token);
     return token;
   },
 
@@ -34,7 +34,7 @@ export const authService = {
   },
 
   /**
-   * Logout - limpia el token
+   * Logout - limpia los tokens
    */
   logout(): void {
     tokenStorage.clear();
@@ -44,6 +44,6 @@ export const authService = {
    * Verifica si hay sesión activa
    */
   isAuthenticated(): boolean {
-    return tokenStorage.get() !== null;
+    return tokenStorage.getAccess() !== null;
   },
 };
