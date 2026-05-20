@@ -1,4 +1,4 @@
-import { GiftRecommendation } from "@/lib/AgentZeroService";
+import { GiftRecommendation } from "@/types/gift";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, Calendar, User, Tag } from "lucide-react";

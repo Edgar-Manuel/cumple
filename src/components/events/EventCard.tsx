@@ -21,8 +21,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { useNavigate } from "react-router-dom";
-import { agentZeroService } from "@/lib/AgentZeroService";
-import { saveEvents, loadEvents } from "@/lib/storage";
+import { useDeleteEvent } from "@/hooks/useEvents";
+import { useGenerateMessage } from "@/hooks/useAI";
+import { ApiClientError } from "@/lib/apiClient";
 import { getCardBackgroundClasses, getDefaultEventImage } from "@/lib/cardImageUtils";
 
 export interface EventProps {
@@ -61,7 +62,9 @@ export default function EventCard({
   
   const { toast } = useToast();
   const navigate = useNavigate();
-  
+  const deleteEvent = useDeleteEvent();
+  const generateMessage = useGenerateMessage();
+
   const daysUntil = Math.ceil((date.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
   const isPast = daysUntil < 0;
   const isToday = daysUntil === 0;
@@ -90,37 +93,45 @@ export default function EventCard({
     }
   };
   
-  // Función para generar un mensaje personalizado
+  // Función para generar un mensaje personalizado vía API + IA
   const handleGenerateMessage = async () => {
+    const eventId = typeof id === "number" ? id : parseInt(String(id), 10);
+    if (Number.isNaN(eventId)) {
+      toast({
+        title: "Evento inválido",
+        description: "No se puede generar mensaje para este evento.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     toast({
       title: "Generando mensaje",
       description: `Preparando un mensaje personalizado para ${personName}...`,
     });
-    
-    try {
-      const message = await agentZeroService.generateMessage(id);
-      
-      if (message) {
-        // Mostrar toast con el mensaje generado
-        toast({
-          title: "Mensaje generado",
-          description: message.content,
-        });
-      } else {
-        toast({
-          title: "No se pudo generar el mensaje",
-          description: "Inténtalo de nuevo más tarde.",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      console.error("Error al generar mensaje:", error);
-      toast({
-        title: "Error",
-        description: "Ocurrió un error al generar el mensaje.",
-        variant: "destructive"
-      });
-    }
+
+    generateMessage.mutate(
+      { event_id: eventId, tone: "friendly", save: true },
+      {
+        onSuccess: (message) => {
+          toast({
+            title: "Mensaje generado",
+            description: message.content,
+          });
+        },
+        onError: (err) => {
+          const description =
+            err instanceof ApiClientError
+              ? err.detail
+              : "Ocurrió un error al generar el mensaje.";
+          toast({
+            title: "Error",
+            description,
+            variant: "destructive",
+          });
+        },
+      },
+    );
   };
   
   // Función para compartir evento
@@ -154,44 +165,44 @@ export default function EventCard({
     }
   };
 
-  // Función para eliminar evento
+  // Función para eliminar evento vía API
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    if (confirm(`¿Estás seguro de que deseas eliminar el evento "${title}"?`)) {
-      try {
-        // Cargar eventos actuales
-        const currentEvents = loadEvents();
-        
-        // Filtrar el evento a eliminar
-        const updatedEvents = currentEvents.filter(event => event.id !== id);
-        
-        // Guardar eventos actualizados
-        saveEvents(updatedEvents);
-        
+
+    if (!confirm(`¿Estás seguro de que deseas eliminar el evento "${title}"?`)) {
+      return;
+    }
+
+    const eventId = typeof id === "number" ? id : parseInt(String(id), 10);
+    if (Number.isNaN(eventId)) {
+      toast({
+        title: "Evento inválido",
+        description: "No se puede eliminar este evento.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    deleteEvent.mutate(eventId, {
+      onSuccess: () => {
         toast({
           title: "Evento eliminado",
           description: `El evento "${title}" ha sido eliminado correctamente.`,
         });
-        
-        // Actualizar la vista si existe la función onUpdate
-        if (onUpdate) {
-          onUpdate();
-        } else {
-          // Si no hay función de actualización, recargar la página
-          setTimeout(() => {
-            window.location.reload();
-          }, 500);
-        }
-      } catch (error) {
-        console.error("Error al eliminar evento:", error);
+        onUpdate?.();
+      },
+      onError: (err) => {
+        const description =
+          err instanceof ApiClientError
+            ? err.detail
+            : "Ocurrió un error al eliminar el evento.";
         toast({
           title: "Error",
-          description: "Ocurrió un error al eliminar el evento.",
-          variant: "destructive"
+          description,
+          variant: "destructive",
         });
-      }
-    }
+      },
+    });
   };
 
   return (

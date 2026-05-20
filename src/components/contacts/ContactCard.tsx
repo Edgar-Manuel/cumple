@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -8,7 +7,8 @@ import {
   Phone,
   Mail,
   Star,
-  User
+  User,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -20,57 +20,67 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export interface ContactProps {
-  id: string;
+  id: number | string;
   name: string;
   image?: string;
   email?: string;
   phone?: string;
   birthdate?: Date;
+  relationship?: string;
   relationshipLevel?: number; // 1-5
   className?: string;
+  onDelete?: () => void;
+  onEdit?: () => void;
+  onViewEvents?: () => void;
+  onViewGifts?: () => void;
+  onSendMessage?: () => void;
 }
 
 export default function ContactCard({
-  id,
   name,
   image,
   email,
   phone,
   birthdate,
+  relationship,
   relationshipLevel = 3,
   className,
+  onDelete,
+  onEdit,
+  onViewEvents,
+  onViewGifts,
+  onSendMessage,
 }: ContactProps) {
-  // Format birthdate if available
   const formattedBirthdate = birthdate
     ? new Intl.DateTimeFormat("es", {
         day: "numeric",
         month: "long",
       }).format(birthdate)
     : null;
-    
-  // Calculate days until next birthday if birthdate is available
-  const daysUntilBirthday = birthdate ? (() => {
-    const today = new Date();
-    const nextBirthday = new Date(
-      today.getFullYear(),
-      birthdate.getMonth(),
-      birthdate.getDate()
-    );
-    
-    if (nextBirthday < today) {
-      nextBirthday.setFullYear(today.getFullYear() + 1);
-    }
-    
-    const diffTime = nextBirthday.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  })() : null;
-  
+
+  const daysUntilBirthday = birthdate
+    ? (() => {
+        const today = new Date();
+        const nextBirthday = new Date(
+          today.getFullYear(),
+          birthdate.getMonth(),
+          birthdate.getDate()
+        );
+        if (nextBirthday < today) {
+          nextBirthday.setFullYear(today.getFullYear() + 1);
+        }
+        const diffTime = nextBirthday.getTime() - today.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      })()
+    : null;
+
   return (
-    <div className={cn(
-      "glass-card rounded-xl overflow-hidden transition-all duration-300",
-      className
-    )}>
+    <div
+      className={cn(
+        "glass-card rounded-xl overflow-hidden transition-all duration-300",
+        className
+      )}
+    >
       <div className="p-5">
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-3">
@@ -87,6 +97,9 @@ export default function ContactCard({
             )}
             <div>
               <h3 className="font-medium text-lg">{name}</h3>
+              {relationship && (
+                <p className="text-xs text-muted-foreground">{relationship}</p>
+              )}
               <div className="flex items-center text-sm text-muted-foreground">
                 <div className="flex mt-1">
                   {Array(5)
@@ -97,8 +110,8 @@ export default function ContactCard({
                         size={14}
                         className={cn(
                           "mr-0.5",
-                          idx < relationshipLevel 
-                            ? "fill-primary text-primary" 
+                          idx < relationshipLevel
+                            ? "fill-primary text-primary"
                             : "text-muted-foreground/40"
                         )}
                       />
@@ -117,12 +130,24 @@ export default function ContactCard({
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Acciones</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Editar contacto</DropdownMenuItem>
-              <DropdownMenuItem>Ver detalles</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
-                Eliminar
-              </DropdownMenuItem>
+              {onEdit && (
+                <DropdownMenuItem onClick={onEdit}>Editar contacto</DropdownMenuItem>
+              )}
+              {onViewEvents && (
+                <DropdownMenuItem onClick={onViewEvents}>Ver eventos</DropdownMenuItem>
+              )}
+              {onDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={onDelete}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -134,14 +159,14 @@ export default function ContactCard({
               <span className="truncate">{email}</span>
             </div>
           )}
-          
+
           {phone && (
             <div className="flex items-center gap-2 text-sm">
               <Phone size={14} className="text-muted-foreground" />
               <span>{phone}</span>
             </div>
           )}
-          
+
           {birthdate && (
             <div className="flex items-center gap-2 text-sm">
               <Calendar size={14} className="text-muted-foreground" />
@@ -149,11 +174,11 @@ export default function ContactCard({
                 {formattedBirthdate}
                 {daysUntilBirthday !== null && daysUntilBirthday <= 30 && (
                   <span className="ml-2 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">
-                    {daysUntilBirthday === 0 
-                      ? "¡Hoy!" 
-                      : daysUntilBirthday === 1 
-                        ? "¡Mañana!" 
-                        : `En ${daysUntilBirthday} días`}
+                    {daysUntilBirthday === 0
+                      ? "¡Hoy!"
+                      : daysUntilBirthday === 1
+                      ? "¡Mañana!"
+                      : `En ${daysUntilBirthday} días`}
                   </span>
                 )}
               </span>
@@ -163,15 +188,27 @@ export default function ContactCard({
       </div>
 
       <div className="border-t flex divide-x">
-        <Button variant="ghost" className="flex-1 rounded-none h-10 text-xs">
+        <Button
+          variant="ghost"
+          className="flex-1 rounded-none h-10 text-xs"
+          onClick={onViewGifts}
+        >
           <Gift size={14} className="mr-1" />
           <span className="hidden sm:inline">Regalos</span>
         </Button>
-        <Button variant="ghost" className="flex-1 rounded-none h-10 text-xs">
+        <Button
+          variant="ghost"
+          className="flex-1 rounded-none h-10 text-xs"
+          onClick={onViewEvents}
+        >
           <Calendar size={14} className="mr-1" />
           <span className="hidden sm:inline">Eventos</span>
         </Button>
-        <Button variant="ghost" className="flex-1 rounded-none h-10 text-xs">
+        <Button
+          variant="ghost"
+          className="flex-1 rounded-none h-10 text-xs"
+          onClick={onSendMessage}
+        >
           <Mail size={14} className="mr-1" />
           <span className="hidden sm:inline">Mensaje</span>
         </Button>

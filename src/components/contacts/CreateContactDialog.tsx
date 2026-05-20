@@ -4,6 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { useCreateContact } from "@/hooks/useContacts";
+import { useCreateEvent } from "@/hooks/useEvents";
+import { ApiClientError } from "@/lib/apiClient";
 import {
   Select,
   SelectContent,
@@ -12,99 +17,82 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+interface CreateContactDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+}
+
+/**
+ * Tipo `Contact` re-exportado para compatibilidad con código existente
+ * que aún consume la forma local previa (incluye `birthdate`, ausente en `ApiContact`).
+ * Cuando se complete la migración, importar `ApiContact` directamente desde `@/types/api`.
+ */
 export interface Contact {
   id: number | string;
   name: string;
   email?: string;
   phone?: string;
   relationship?: string;
-  birthdate?: string;
-  affinity?: number; // Grado de afinidad (1-5)
-  howWeMet?: string; // Cómo se conocieron
-  interests?: string; // Intereses y hobbies
-  previousGifts?: string; // Historial de regalos previos
-  notes?: string; // Notas adicionales y anécdotas
+  interests?: string;
+  affinity?: number;
+  how_we_met?: string;
+  notes?: string;
+  photo_url?: string;
+  /**
+   * Fecha de nacimiento. En la nueva API esto se modela como un evento separado
+   * de tipo "birthday"; se mantiene aquí como opcional para compatibilidad.
+   */
+  birthdate?: string | Date;
+  image?: string;
 }
 
-interface CreateContactDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreateContact: (contact: Omit<Contact, "id">) => void;
-}
+const commonInterests = [
+  "Tecnología", "Deportes", "Lectura", "Música", "Cine", "Viajes",
+  "Cocina", "Arte", "Fotografía", "Jardinería", "Videojuegos", "Moda",
+  "Fitness", "Decoración", "Naturaleza", "Historia"
+];
+
+const commonRelationships = [
+  "Familiar", "Amigo/a", "Compañero/a de trabajo", "Pareja", "Vecino/a",
+  "Conocido/a", "Profesor/a", "Estudiante", "Jefe/a", "Cliente"
+];
 
 export default function CreateContactDialog({
   open,
   onOpenChange,
-  onCreateContact
+  onSuccess,
 }: CreateContactDialogProps) {
+  const { toast } = useToast();
+  const createContact = useCreateContact();
+  const createEvent = useCreateEvent();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [relationship, setRelationship] = useState("");
   const [birthdate, setBirthdate] = useState("");
-  const [affinity, setAffinity] = useState("3"); // Default a nivel medio
+  const [affinity, setAffinity] = useState("3");
   const [howWeMet, setHowWeMet] = useState("");
   const [interests, setInterests] = useState("");
-  const [previousGifts, setPreviousGifts] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Lista predefinida de intereses comunes que pueden seleccionarse
-  const commonInterests = [
-    "Tecnología", "Deportes", "Lectura", "Música", "Cine", "Viajes", 
-    "Cocina", "Arte", "Fotografía", "Jardinería", "Videojuegos", "Moda",
-    "Fitness", "Decoración", "Naturaleza", "Historia"
-  ];
-
-  // Lista predefinida de relaciones comunes
-  const commonRelationships = [
-    "Familiar", "Amigo/a", "Compañero/a de trabajo", "Pareja", "Vecino/a", 
-    "Conocido/a", "Profesor/a", "Estudiante", "Jefe/a", "Cliente"
-  ];
-
-  // Agregar interés al campo de intereses
   const addInterest = (interest: string) => {
     if (interests.includes(interest)) return;
-    
-    const newInterests = interests.length > 0 
-      ? `${interests}, ${interest}`
-      : interest;
-    
-    setInterests(newInterests);
+    setInterests(interests.length > 0 ? `${interests}, ${interest}` : interest);
   };
 
-  // Calcular edad a partir de la fecha de nacimiento
-  const calculateAge = (birthdate: string) => {
-    if (!birthdate) return "";
-    
+  const calculateAge = (date: string) => {
+    if (!date) return "";
     const today = new Date();
-    const birthDate = new Date(birthdate);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    
+    const birth = new Date(date);
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
     return `${age} años`;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    onCreateContact({
-      name,
-      email,
-      phone,
-      relationship,
-      birthdate,
-      affinity: parseInt(affinity),
-      howWeMet,
-      interests,
-      previousGifts,
-      notes
-    });
-
-    // Limpiar el formulario
+  const resetForm = () => {
     setName("");
     setEmail("");
     setPhone("");
@@ -113,10 +101,66 @@ export default function CreateContactDialog({
     setAffinity("3");
     setHowWeMet("");
     setInterests("");
-    setPreviousGifts("");
     setNotes("");
-    onOpenChange(false);
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const newContact = await createContact.mutateAsync({
+        name,
+        email: email || undefined,
+        phone: phone || undefined,
+        relationship: relationship || undefined,
+        interests: interests || undefined,
+        affinity: parseInt(affinity, 10),
+        how_we_met: howWeMet || undefined,
+        notes: notes || undefined,
+      });
+
+      // Si hay fecha de nacimiento, crear un evento de cumpleaños
+      if (birthdate) {
+        try {
+          // Usar próximo cumpleaños (mismo día/mes este año o el siguiente)
+          const birth = new Date(birthdate);
+          const today = new Date();
+          const next = new Date(today.getFullYear(), birth.getMonth(), birth.getDate());
+          if (next < today) next.setFullYear(today.getFullYear() + 1);
+
+          await createEvent.mutateAsync({
+            contact_id: newContact.id,
+            title: `Cumpleaños de ${newContact.name}`,
+            event_type: "birthday",
+            date: next.toISOString(),
+            reminder_days: 7,
+          });
+        } catch (err) {
+          console.error("No se pudo crear el evento de cumpleaños:", err);
+        }
+      }
+
+      toast({
+        title: "Contacto creado",
+        description: `${newContact.name} ha sido añadido correctamente.`,
+      });
+      resetForm();
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (err) {
+      const message =
+        err instanceof ApiClientError
+          ? err.detail
+          : "No se pudo crear el contacto. Inténtalo de nuevo.";
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const isSubmitting = createContact.isPending || createEvent.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,11 +174,10 @@ export default function CreateContactDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Información Básica */}
             <div className="space-y-2 md:col-span-2">
               <h3 className="text-sm font-medium text-muted-foreground">Información Básica</h3>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="name">Nombre completo*</Label>
               <Input
@@ -145,18 +188,15 @@ export default function CreateContactDialog({
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="relationship" className="flex justify-between">
                 <span>Relación</span>
                 <span className="text-xs text-muted-foreground">Ayuda a personalizar recomendaciones</span>
               </Label>
-              <Select
-                value={relationship}
-                onValueChange={setRelationship}
-              >
+              <Select value={relationship} onValueChange={setRelationship}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona o escribe una relación" />
+                  <SelectValue placeholder="Selecciona una relación" />
                 </SelectTrigger>
                 <SelectContent>
                   <div className="px-3 py-2 text-xs text-muted-foreground">
@@ -168,7 +208,7 @@ export default function CreateContactDialog({
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="email">Correo electrónico</Label>
               <Input
@@ -179,7 +219,7 @@ export default function CreateContactDialog({
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="phone">Teléfono</Label>
               <Input
@@ -204,16 +244,13 @@ export default function CreateContactDialog({
                 onChange={(e) => setBirthdate(e.target.value)}
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="affinity" className="flex justify-between">
                 <span>Grado de afinidad</span>
                 <span className="text-xs text-muted-foreground">Importancia (1-5)</span>
               </Label>
-              <Select
-                value={affinity}
-                onValueChange={setAffinity}
-              >
+              <Select value={affinity} onValueChange={setAffinity}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona el nivel de afinidad" />
                 </SelectTrigger>
@@ -227,16 +264,15 @@ export default function CreateContactDialog({
               </Select>
             </div>
 
-            {/* Información para Recomendaciones */}
             <div className="space-y-2 md:col-span-2 pt-2">
               <h3 className="text-sm font-medium text-primary">Información para Mejores Recomendaciones</h3>
-              <p className="text-xs text-muted-foreground">Esta información es clave para generar recomendaciones personalizadas</p>
+              <p className="text-xs text-muted-foreground">Clave para generar recomendaciones personalizadas</p>
             </div>
-            
+
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="interests" className="flex justify-between">
                 <span>Intereses y aficiones</span>
-                <span className="text-xs text-muted-foreground">¡Muy importante para las recomendaciones!</span>
+                <span className="text-xs text-muted-foreground">¡Muy importante!</span>
               </Label>
               <Textarea
                 id="interests"
@@ -257,7 +293,7 @@ export default function CreateContactDialog({
                 ))}
               </div>
             </div>
-            
+
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="howWeMet">¿Cómo se conocieron?</Label>
               <Textarea
@@ -267,22 +303,12 @@ export default function CreateContactDialog({
                 onChange={(e) => setHowWeMet(e.target.value)}
               />
             </div>
-            
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="previousGifts">Regalos anteriores</Label>
-              <Textarea
-                id="previousGifts"
-                placeholder="Lista de regalos que ya le has dado (evita repeticiones)"
-                value={previousGifts}
-                onChange={(e) => setPreviousGifts(e.target.value)}
-              />
-            </div>
-            
+
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="notes">Notas adicionales</Label>
               <Textarea
                 id="notes"
-                placeholder="Cualquier otra información relevante, anécdotas o detalles"
+                placeholder="Cualquier otra información, anécdotas o detalles"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
@@ -290,13 +316,16 @@ export default function CreateContactDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancelar
             </Button>
-            <Button type="submit">Crear Contacto</Button>
+            <Button type="submit" disabled={isSubmitting || !name.trim()}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Crear Contacto
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
   );
-} 
+}

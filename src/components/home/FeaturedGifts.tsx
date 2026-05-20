@@ -1,75 +1,61 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { giftRecommendationService } from "@/services/giftRecommendationService";
-import { GiftRecommendation } from "@/lib/AgentZeroService";
-import { loadEvents, loadContacts } from "@/lib/storage";
-import { EventProps } from "@/components/events/EventCard";
-import { Contact } from "@/components/contacts/CreateContactDialog";
 import { Gift } from "lucide-react";
 import { GiftCard } from "@/components/gifts/GiftCard";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-
-interface ExtendedEventProps extends EventProps {
-  contactId?: number | string;
-  affinity?: number;
-  howWeMet?: string;
-  interests?: string;
-  previousGifts?: string;
-}
+import { useUpcomingEvents } from "@/hooks/useEvents";
+import { useContacts } from "@/hooks/useContacts";
+import { giftsService } from "@/services/giftsService";
+import { apiGiftToRecommendation } from "@/types/gift";
+import type { GiftRecommendation } from "@/types/gift";
 
 export function FeaturedGifts() {
-  const [recommendations, setRecommendations] = useState<GiftRecommendation[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
-  
+  const { data: events, isLoading: isLoadingEvents } = useUpcomingEvents(30);
+  const { data: contacts } = useContacts();
+  const [recommendations, setRecommendations] = useState<GiftRecommendation[]>(
+    [],
+  );
+  const [isLoadingGifts, setIsLoadingGifts] = useState(false);
+
   useEffect(() => {
-    const loadFeaturedGifts = async () => {
-      setIsLoading(true);
+    if (!events) return;
+    let cancelled = false;
+    setIsLoadingGifts(true);
+
+    (async () => {
       try {
-        // Cargar eventos y contactos
-        const events = loadEvents<ExtendedEventProps>();
-        const contacts = loadContacts<Contact>();
-        
-        // Filtrar eventos próximos
-        const upcomingEvents = events.filter(event => {
-          const eventDate = new Date(event.date);
-          const now = new Date();
-          const oneMonthLater = new Date();
-          oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
-          
-          return eventDate >= now && eventDate <= oneMonthLater;
-        });
-        
-        // Obtener recomendaciones para eventos próximos
-        const allRecommendations: GiftRecommendation[] = [];
-        for (const event of upcomingEvents) {
-          if (event.contactId && event.date) {
-            try {
-              const recs = await giftRecommendationService.generateRecommendations(event.id);
-              allRecommendations.push(...recs);
-            } catch (error) {
-              console.error(`Error al generar recomendaciones para evento ${event.id}:`, error);
-            }
+        const all: GiftRecommendation[] = [];
+        for (const event of events) {
+          try {
+            const gifts = await giftsService.listByEvent(event.id);
+            const contact = contacts?.find((c) => c.id === event.contact_id);
+            gifts.forEach((g) =>
+              all.push(apiGiftToRecommendation(g, contact?.name ?? "")),
+            );
+          } catch {
+            // Ignorar eventos sin regalos
           }
         }
-        
-        // Ordenar por relevancia y tomar las 3 mejores
-        const featuredRecs = allRecommendations
-          .sort((a, b) => (b.relevance || 0) - (a.relevance || 0))
-          .slice(0, 3);
-        
-        setRecommendations(featuredRecs);
-      } catch (error) {
-        console.error("Error al cargar recomendaciones destacadas:", error);
+        if (!cancelled) {
+          const featured = all
+            .sort((a, b) => (b.relevance ?? 0) - (a.relevance ?? 0))
+            .slice(0, 3);
+          setRecommendations(featured);
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoadingGifts(false);
       }
+    })();
+
+    return () => {
+      cancelled = true;
     };
-    
-    loadFeaturedGifts();
-  }, []);
-  
+  }, [events, contacts]);
+
+  const isLoading = isLoadingEvents || isLoadingGifts;
+
   if (isLoading) {
     return (
       <Card>
@@ -82,13 +68,15 @@ export function FeaturedGifts() {
         <CardContent>
           <div className="text-center py-6">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-            <p className="mt-2 text-sm text-gray-500">Cargando recomendaciones...</p>
+            <p className="mt-2 text-sm text-gray-500">
+              Cargando recomendaciones...
+            </p>
           </div>
         </CardContent>
       </Card>
     );
   }
-  
+
   if (recommendations.length === 0) {
     return (
       <Card>
@@ -100,10 +88,12 @@ export function FeaturedGifts() {
         </CardHeader>
         <CardContent>
           <div className="text-center py-4">
-            <p className="text-sm text-gray-500">No hay recomendaciones de regalos destacados disponibles.</p>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <p className="text-sm text-gray-500">
+              No hay recomendaciones de regalos destacados disponibles.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
               className="mt-2"
               onClick={() => navigate("/gifts")}
             >
@@ -114,11 +104,7 @@ export function FeaturedGifts() {
       </Card>
     );
   }
-  
-  // Cargar eventos y contactos para obtener información adicional
-  const events = loadEvents<ExtendedEventProps>();
-  const contacts = loadContacts<Contact>();
-  
+
   return (
     <Card>
       <CardHeader>
@@ -129,14 +115,13 @@ export function FeaturedGifts() {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 gap-4">
-          {recommendations.map(gift => {
-            const event = events.find(e => e.id === gift.eventId);
-            const contact = event && event.contactId 
-              ? contacts.find(c => c.id === event.contactId) 
-              : null;
-            
+          {recommendations.map((gift) => {
+            const event = events?.find((e) => e.id === gift.eventId);
+            const contact = event
+              ? contacts?.find((c) => c.id === event.contact_id)
+              : undefined;
             return (
-              <GiftCard 
+              <GiftCard
                 key={gift.id}
                 gift={gift}
                 eventDate={event?.date}
@@ -144,12 +129,9 @@ export function FeaturedGifts() {
               />
             );
           })}
-          
+
           <div className="text-center mt-2">
-            <Button 
-              variant="outline" 
-              onClick={() => navigate("/gifts")}
-            >
+            <Button variant="outline" onClick={() => navigate("/gifts")}>
               Ver todos los regalos
             </Button>
           </div>
@@ -157,4 +139,4 @@ export function FeaturedGifts() {
       </CardContent>
     </Card>
   );
-} 
+}

@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import InteractiveBentoGallery from '@/components/blocks/interactive-bento-gallery';
-import { loadContacts } from '@/lib/storage';
-import { Contact } from './CreateContactDialog';
+import { useMemo } from "react";
+import { Loader2 } from "lucide-react";
+import InteractiveBentoGallery from "@/components/blocks/interactive-bento-gallery";
+import { useContacts } from "@/hooks/useContacts";
+import { useEvents } from "@/hooks/useEvents";
+import type { ApiContact, ApiEvent } from "@/types/api";
 
 // Mapeo de posibles posiciones en la cuadrícula
 const gridPositions = [
@@ -12,7 +14,8 @@ const gridPositions = [
 ];
 
 // URL de imagen por defecto para contactos sin imagen
-const DEFAULT_IMAGE = 'https://via.placeholder.com/400x600/667eea/ffffff?text=Sin+Imagen';
+const DEFAULT_IMAGE =
+  "https://via.placeholder.com/400x600/667eea/ffffff?text=Sin+Imagen";
 
 // Interfaz para los elementos de medios
 interface MediaItem {
@@ -29,40 +32,68 @@ interface ContactGalleryProps {
   description?: string;
 }
 
-export default function ContactGallery({ title = "Mis Contactos", description = "Arrastra y explora tus contactos" }: ContactGalleryProps) {
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+function buildDescription(
+  contact: ApiContact,
+  events: ApiEvent[] | undefined,
+): string {
+  if (contact.notes) return contact.notes;
 
-  useEffect(() => {
-    // Cargar contactos y convertirlos en elementos de medios
-    const contacts = loadContacts<Contact>();
-    
-    const items: MediaItem[] = contacts.map((contact, index) => ({
-      id: typeof contact.id === 'string' ? parseInt(contact.id) : contact.id,
-      type: "image", // Asumimos que todos son imágenes por ahora
+  const birthday = events?.find(
+    (e) => e.contact_id === contact.id && e.event_type === "birthday",
+  );
+  if (birthday) {
+    return `Cumpleaños: ${new Date(birthday.date).toLocaleDateString("es-ES")}`;
+  }
+
+  return contact.relationship ?? "";
+}
+
+export default function ContactGallery({
+  title = "Mis Contactos",
+  description = "Arrastra y explora tus contactos",
+}: ContactGalleryProps) {
+  const { data: contacts, isLoading } = useContacts();
+  const { data: events } = useEvents();
+
+  const mediaItems = useMemo<MediaItem[]>(() => {
+    if (!contacts) return [];
+    return contacts.map((contact, index) => ({
+      id: contact.id,
+      type: "image",
       title: contact.name,
-      desc: contact.notes || (contact.birthdate ? `Cumpleaños: ${new Date(contact.birthdate).toLocaleDateString('es-ES')}` : ""),
-      url: DEFAULT_IMAGE, // Usamos imagen por defecto ya que Contact no tiene propiedad photo
-      span: gridPositions[index % gridPositions.length] // Asignar posiciones de manera cíclica
+      desc: buildDescription(contact, events),
+      url: contact.photo_url || DEFAULT_IMAGE,
+      span: gridPositions[index % gridPositions.length],
     }));
+  }, [contacts, events]);
 
-    setMediaItems(items);
-  }, []);
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   // Si no hay contactos, mostrar mensaje
   if (mediaItems.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[300px] text-center p-8">
-        <h2 className="text-xl font-semibold mb-2">No hay contactos para mostrar</h2>
-        <p className="text-muted-foreground">Añade contactos para verlos en la galería</p>
+        <h2 className="text-xl font-semibold mb-2">
+          No hay contactos para mostrar
+        </h2>
+        <p className="text-muted-foreground">
+          Añade contactos para verlos en la galería
+        </p>
       </div>
     );
   }
 
   return (
-    <InteractiveBentoGallery 
+    <InteractiveBentoGallery
       mediaItems={mediaItems}
       title={title}
       description={description}
     />
   );
-} 
+}
