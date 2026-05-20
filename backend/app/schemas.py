@@ -73,6 +73,8 @@ class EventBase(BaseModel):
     date: datetime
     reminder_days: Optional[int] = 7
     notes: Optional[str] = None
+    event_interests: Optional[str] = None
+    previous_gifts: Optional[str] = None
 
 class EventCreate(EventBase):
     contact_id: int
@@ -83,6 +85,8 @@ class EventUpdate(BaseModel):
     date: Optional[datetime] = None
     reminder_days: Optional[int] = None
     notes: Optional[str] = None
+    event_interests: Optional[str] = None
+    previous_gifts: Optional[str] = None
     is_completed: Optional[bool] = None
 
 class Event(EventBase):

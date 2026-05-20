@@ -125,9 +125,7 @@ export default function EventList({
     type: "birthday" | "anniversary" | "graduation" | "holiday" | "other";
     personName: string;
     contactId?: number | string;
-    affinity?: number;
-    howWeMet?: string;
-    interests?: string;
+    eventInterests?: string;
     previousGifts?: string;
   }) => {
     if (!data.contactId) {
@@ -161,7 +159,8 @@ export default function EventList({
         event_type: data.type,
         date: data.date.toISOString(),
         reminder_days: 7,
-        notes: data.previousGifts || data.howWeMet || undefined,
+        event_interests: data.eventInterests,
+        previous_gifts: data.previousGifts,
       },
       {
         onSuccess: () => {

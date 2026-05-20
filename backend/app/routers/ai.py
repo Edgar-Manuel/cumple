@@ -105,6 +105,10 @@ async def generate_gift_recommendations(
     recommendations = await AIService.generate_gift_recommendations(
         person_name=contact.name,
         interests=contact.interests,
+        event_interests=event.event_interests,
+        previous_gifts=event.previous_gifts,
+        affinity=contact.affinity,
+        event_type=event.event_type or "birthday",
         budget=request.budget,
         relationship=contact.relationship or "friend",
     )
@@ -112,7 +116,7 @@ async def generate_gift_recommendations(
     if not recommendations:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="No se pudieron generar recomendaciones. Verifica tu OPENAI_API_KEY.",
+            detail="No se pudieron generar recomendaciones.",
         )
 
     # Crear regalos en la BD

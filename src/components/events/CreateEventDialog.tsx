@@ -10,9 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
-import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { Contact } from "@/components/contacts/CreateContactDialog";
 import { Plus, Calendar, Info, Sparkles } from "lucide-react";
@@ -29,9 +26,7 @@ interface CreateEventDialogProps {
     type: "birthday" | "anniversary" | "graduation" | "holiday" | "other";
     personName: string;
     contactId?: number | string;
-    affinity?: number;
-    howWeMet?: string;
-    interests?: string;
+    eventInterests?: string;
     previousGifts?: string;
   }) => void;
   onCreateContactClick: () => void;
@@ -87,9 +82,7 @@ export default function CreateEventDialog({
   const [type, setType] = useState<"birthday" | "anniversary" | "graduation" | "holiday" | "other">("birthday");
   const [selectedContactId, setSelectedContactId] = useState<string>("none");
   const [personName, setPersonName] = useState("");
-  const [affinity, setAffinity] = useState<string>("3");
-  const [howWeMet, setHowWeMet] = useState("");
-  const [interests, setInterests] = useState("");
+  const [eventInterests, setEventInterests] = useState("");
   const [previousGifts, setPreviousGifts] = useState("");
 
   // Gestión de título automático cuando cambia el tipo o el contacto
@@ -197,10 +190,6 @@ export default function CreateEventDialog({
           setDateString(eventDate.toISOString().split('T')[0]);
         }
         
-        // Si hay notas, usarlas como intereses
-        if (selectedContact.notes) {
-          setInterests(selectedContact.notes);
-        }
       }
     }
   };
@@ -224,21 +213,16 @@ export default function CreateEventDialog({
       type,
       personName,
       contactId: selectedContactId !== "none" ? selectedContactId : undefined,
-      affinity: parseInt(affinity),
-      howWeMet,
-      interests,
-      previousGifts
+      eventInterests: eventInterests || undefined,
+      previousGifts: previousGifts || undefined,
     });
 
-    // Limpiar el formulario
     setTitle("");
     setDateString("");
     setType("birthday");
     setSelectedContactId("none");
     setPersonName("");
-    setAffinity("3");
-    setHowWeMet("");
-    setInterests("");
+    setEventInterests("");
     setPreviousGifts("");
     onOpenChange(false);
   };
@@ -399,36 +383,30 @@ export default function CreateEventDialog({
               </p>
             </div>
 
-            {selectedContactId === "none" && (
-              <div className="space-y-2 md:col-span-2">
-                <Label 
-                  htmlFor="interests" 
-                  className="flex justify-between"
-                >
-                  <span>Intereses y aficiones</span>
-                  <span className="text-xs text-muted-foreground">Muy importante para las recomendaciones</span>
-                </Label>
-                <Textarea
-                  id="interests"
-                  value={interests}
-                  onChange={(e) => setInterests(e.target.value)}
-                  placeholder="Ej. Le gusta la tecnología, viajar, cocinar, la música jazz..."
-                  className="min-h-[80px]"
-                />
-              </div>
-            )}
-            
-            {selectedContactId === "none" && (
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="previousGifts">Regalos anteriores</Label>
-                <Textarea
-                  id="previousGifts"
-                  value={previousGifts}
-                  onChange={(e) => setPreviousGifts(e.target.value)}
-                  placeholder="Lista de regalos que ya has dado a esta persona (para evitar repeticiones)"
-                />
-              </div>
-            )}
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="eventInterests" className="flex justify-between">
+                <span>Intereses específicos para este evento</span>
+                <span className="text-xs text-muted-foreground">Opcional</span>
+              </Label>
+              <Textarea
+                id="eventInterests"
+                value={eventInterests}
+                onChange={(e) => setEventInterests(e.target.value)}
+                placeholder="Ej. Este año está obsesionado con la cocina italiana, busca un libro de pasta..."
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="previousGifts">Regalos anteriores</Label>
+              <Textarea
+                id="previousGifts"
+                value={previousGifts}
+                onChange={(e) => setPreviousGifts(e.target.value)}
+                placeholder="Lista de regalos que ya has dado a esta persona (para evitar repeticiones)"
+                className="min-h-[80px]"
+              />
+            </div>
           </div>
 
           <DialogFooter className="pt-4">

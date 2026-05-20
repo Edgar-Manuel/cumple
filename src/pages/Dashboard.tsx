@@ -216,6 +216,8 @@ const Dashboard = () => {
     type: "birthday" | "anniversary" | "graduation" | "holiday" | "other";
     personName: string;
     contactId?: number | string;
+    eventInterests?: string;
+    previousGifts?: string;
   }) => {
     if (!data.contactId) {
       toast({
@@ -248,6 +250,8 @@ const Dashboard = () => {
         event_type: data.type,
         date: data.date.toISOString(),
         reminder_days: 7,
+        event_interests: data.eventInterests,
+        previous_gifts: data.previousGifts,
       },
       {
         onSuccess: () => {

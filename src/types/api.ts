@@ -74,6 +74,8 @@ export interface ApiEvent {
   date: string;
   reminder_days: number;
   notes?: string;
+  event_interests?: string;
+  previous_gifts?: string;
   is_completed: boolean;
   google_calendar_id?: string;
   created_at: string;
@@ -87,6 +89,8 @@ export interface EventCreate {
   date: string;
   reminder_days?: number;
   notes?: string;
+  event_interests?: string;
+  previous_gifts?: string;
 }
 
 export interface EventUpdate {
@@ -95,6 +99,8 @@ export interface EventUpdate {
   date?: string;
   reminder_days?: number;
   notes?: string;
+  event_interests?: string;
+  previous_gifts?: string;
   is_completed?: boolean;
 }
 

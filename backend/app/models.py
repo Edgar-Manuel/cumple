@@ -55,6 +55,8 @@ class Event(Base):
     date = Column(DateTime, nullable=False, index=True)
     reminder_days = Column(Integer, default=7)
     notes = Column(Text)
+    event_interests = Column(Text)  # intereses especificos para este evento (override contact.interests)
+    previous_gifts = Column(Text)  # regalos ya dados para evitar repetir
     is_completed = Column(Boolean, default=False)
     google_calendar_id = Column(String)  # ID en Google Calendar
     created_at = Column(DateTime, default=datetime.utcnow)
