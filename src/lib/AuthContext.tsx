@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * Carga el usuario actual desde el token guardado
    */
   const loadUser = useCallback(async () => {
-    const token = tokenStorage.get();
+    const token = tokenStorage.getAccess();
     if (!token) {
       setUser(null);
       setLoading(false);

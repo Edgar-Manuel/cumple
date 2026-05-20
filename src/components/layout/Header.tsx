@@ -77,16 +77,18 @@ export default function Header() {
         </nav>
 
         <div className="hidden md:flex items-center space-x-4">
-          <Button 
-            variant="outline" 
+          <Button
+            asChild
+            variant="outline"
             className="font-medium transition-all duration-300"
           >
-            Iniciar Sesión
+            <Link to="/login">Iniciar Sesión</Link>
           </Button>
-          <Button 
+          <Button
+            asChild
             className="font-medium shadow-button transition-all duration-300"
           >
-            Registrarse
+            <Link to="/login">Registrarse</Link>
           </Button>
         </div>
 
@@ -145,18 +147,20 @@ export default function Header() {
             </Link>
           </nav>
           <div className="flex flex-col space-y-3">
-            <Button 
-              variant="outline" 
+            <Button
+              asChild
+              variant="outline"
               className="w-full font-medium"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Iniciar Sesión
+              <Link to="/login">Iniciar Sesión</Link>
             </Button>
-            <Button 
+            <Button
+              asChild
               className="w-full font-medium"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Registrarse
+              <Link to="/login">Registrarse</Link>
             </Button>
           </div>
         </div>
