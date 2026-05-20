@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { GiftCard } from "@/components/gifts/GiftCard";
-import { Gift, ArrowLeft, Calendar, User, Loader2, Sparkles } from "lucide-react";
+import { Gift, ArrowLeft, Calendar, User, Loader2, Sparkles, Info } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useEvent } from "@/hooks/useEvents";
 import { useContact } from "@/hooks/useContacts";
@@ -204,16 +204,26 @@ export default function EventGifts() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {recommendations.map((gift) => (
-                    <GiftCard
-                      key={gift.id}
-                      gift={gift}
-                      eventDate={event.date}
-                      contactName={contact?.name}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                    <p>
+                      Como afiliados de Amazon, ganamos una pequeña comisión por las
+                      compras elegibles realizadas a través de estos enlaces. El precio
+                      para ti no cambia.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {recommendations.map((gift) => (
+                      <GiftCard
+                        key={gift.id}
+                        gift={gift}
+                        eventDate={event.date}
+                        contactName={contact?.name}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>

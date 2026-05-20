@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GiftCard } from "@/components/gifts/GiftCard";
-import { Gift, Loader2 } from "lucide-react";
+import { Gift, Loader2, Info } from "lucide-react";
 import { useEvents } from "@/hooks/useEvents";
 import { useContacts } from "@/hooks/useContacts";
 import { giftsService } from "@/services/giftsService";
@@ -137,7 +137,15 @@ export default function Gifts() {
             </div>
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-6">
+            <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+              <p>
+                Como afiliados de Amazon, ganamos una pequeña comisión por las
+                compras elegibles realizadas a través de estos enlaces. El precio
+                para ti no cambia.
+              </p>
+            </div>
             {categories.length > 1 ? (
               <Tabs defaultValue={categories[0]} className="w-full">
                 <TabsList className="mb-4">

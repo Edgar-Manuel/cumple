@@ -1,9 +1,10 @@
 import { GiftRecommendation } from "@/types/gift";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Calendar, User, Tag } from "lucide-react";
+import { ExternalLink, Calendar, User } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { API_BASE_URL } from "@/lib/apiClient";
 
 interface GiftCardProps {
   gift: GiftRecommendation;
@@ -14,32 +15,33 @@ interface GiftCardProps {
 
 export function GiftCard({ gift, eventDate, contactName, showCategory = true }: GiftCardProps) {
   const { toast } = useToast();
-  
-  const handleBuyGift = () => {
-    // Abrir el enlace de afiliado en una nueva pestaña
-    if (gift.affiliateLink) {
-      window.open(gift.affiliateLink, '_blank');
-      
-      // Mostrar toast de confirmación
-      toast({
-        title: "¡Genial elección!",
-        description: `Estás siendo redirigido a la página del producto "${gift.title}".`,
-        duration: 5000,
-      });
-    }
+
+  // Para gifts del backend (id numerico) pasamos por /gifts/{id}/track para
+  // incrementar el click_count y luego redirigir 302 a Amazon con el tag.
+  // Para gifts offline (id string) abrimos el affiliateLink directo.
+  const isBackendGift = typeof gift.id === "number";
+  const trackedHref = isBackendGift
+    ? `${API_BASE_URL}/gifts/${gift.id}/track`
+    : gift.affiliateLink;
+
+  const handleClick = () => {
+    toast({
+      title: "¡Genial elección!",
+      description: `Te estamos llevando a "${gift.title}" en Amazon.`,
+      duration: 4000,
+    });
   };
 
-  // Formatear la fecha si está disponible
   const formattedDate = eventDate
     ? new Date(eventDate).toLocaleDateString('es-ES', {
         day: 'numeric',
         month: 'short'
       })
     : null;
-  
-  // Usar el nombre de contacto proporcionado o el de la recomendación
+
   const displayName = contactName || gift.personName || "Desconocido";
-  
+  const hasLink = !!gift.affiliateLink || isBackendGift;
+
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow duration-300">
       <CardHeader className="pb-3">
@@ -56,17 +58,17 @@ export function GiftCard({ gift, eventDate, contactName, showCategory = true }: 
           {displayName}
         </CardDescription>
       </CardHeader>
-      
+
       {gift.imageUrl && (
         <div className="h-48 overflow-hidden">
-          <img 
-            src={gift.imageUrl} 
-            alt={gift.title} 
+          <img
+            src={gift.imageUrl}
+            alt={gift.title}
             className="w-full h-full object-contain p-2"
           />
         </div>
       )}
-      
+
       <CardContent className="pt-4">
         <p className="mb-3">{gift.description}</p>
         <div className="flex justify-between items-center mt-4">
@@ -81,17 +83,26 @@ export function GiftCard({ gift, eventDate, contactName, showCategory = true }: 
           )}
         </div>
       </CardContent>
-      
+
       <CardFooter className="pt-0">
-        <Button 
-          className="w-full gap-2" 
-          onClick={handleBuyGift}
-          disabled={!gift.affiliateLink}
-        >
-          <ExternalLink className="h-4 w-4" />
-          Ver producto
-        </Button>
+        {hasLink ? (
+          <Button asChild className="w-full gap-2" onClick={handleClick}>
+            <a
+              href={trackedHref}
+              target="_blank"
+              rel="nofollow sponsored noopener noreferrer"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Ver en Amazon
+            </a>
+          </Button>
+        ) : (
+          <Button className="w-full gap-2" disabled>
+            <ExternalLink className="h-4 w-4" />
+            Sin enlace disponible
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );
-} 
+}

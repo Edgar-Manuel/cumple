@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    # Amazon Associates
+    AMAZON_AFFILIATE_TAG: str = "cumple-21"
+    AMAZON_MARKETPLACE: str = "es"  # es | com | com.mx | co.uk | de | fr | it
+
     # Entorno
     ENVIRONMENT: str = "development"
     DEBUG: bool = True

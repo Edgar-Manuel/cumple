@@ -128,6 +128,7 @@ async def generate_gift_recommendations(
             description=rec.get("description"),
             price=rec.get("price"),
             category=rec.get("category"),
+            affiliate_link=rec.get("affiliate_link"),
         )
         db.add(gift)
         created_gifts.append(gift)

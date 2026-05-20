@@ -1,13 +1,33 @@
 """Router de regalos"""
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
 from app.models import Gift, Event, User
 from app.schemas import Gift as GiftSchema, GiftCreate
 from app.auth import get_current_active_user
+from app.ai_service import build_affiliate_link
 
 router = APIRouter(prefix="/gifts", tags=["gifts"])
+
+
+@router.get("/{gift_id}/track", include_in_schema=True)
+def track_and_redirect(gift_id: int, db: Session = Depends(get_db)):
+    """Endpoint publico: incrementa click_count y redirige al affiliate_link.
+
+    Publico porque el redirect se llama desde una pestana nueva donde el
+    Bearer token no se envia. El affiliate_link es publico de todos modos.
+    """
+    db_gift = db.query(Gift).filter(Gift.id == gift_id).first()
+    if not db_gift:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Gift not found"
+        )
+    db_gift.click_count = (db_gift.click_count or 0) + 1
+    db.commit()
+    target = db_gift.affiliate_link or build_affiliate_link(db_gift.title)
+    return RedirectResponse(url=target, status_code=302)
 
 @router.post("/", response_model=GiftSchema)
 def create_gift(

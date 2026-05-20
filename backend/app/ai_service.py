@@ -1,6 +1,7 @@
 """Servicio de IA para generación de contenido con OpenAI SDK >= 1.0"""
 import json
 from typing import Optional
+from urllib.parse import quote_plus
 
 try:
     import openai
@@ -13,6 +14,20 @@ from app.config import settings
 client = None
 if _has_openai and settings.OPENAI_API_KEY:
     client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
+
+def build_affiliate_link(query: str) -> str:
+    """URL de busqueda en Amazon con el tag de afiliado configurado.
+
+    Para MVP usamos enlace de busqueda (no requiere PA-API ni aprobacion).
+    Cuando el negocio tenga ventas y acceso a PA-API, este helper se
+    intercambia por una llamada que devuelve URL de producto directo (ASIN).
+    """
+    tag = settings.AMAZON_AFFILIATE_TAG
+    marketplace = settings.AMAZON_MARKETPLACE or "es"
+    encoded = quote_plus(query or "regalo")
+    base = f"https://www.amazon.{marketplace}/s"
+    return f"{base}?k={encoded}&tag={tag}"
 
 
 EVENT_TYPE_ES = {
@@ -125,7 +140,7 @@ class AIService:
                 content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
             recommendations = json.loads(content)
             if isinstance(recommendations, list):
-                return recommendations[:5]
+                return _attach_affiliate_links(recommendations[:5])
             return _fallback_recommendations(event_type, budget)
         except Exception:
             return _fallback_recommendations(event_type, budget)
@@ -174,7 +189,7 @@ class AIService:
 def _fallback_recommendations(event_type: str, budget: Optional[float]) -> list[dict]:
     """Recomendaciones genéricas cuando no hay OPENAI_API_KEY o la API falla."""
     base_price = budget if budget and budget > 0 else 35.0
-    return [
+    recs = [
         {
             "title": "Libro personalizado",
             "description": "Un libro elegido a partir de sus intereses, con dedicatoria personal.",
@@ -206,3 +221,14 @@ def _fallback_recommendations(event_type: str, budget: Optional[float]) -> list[
             "category": "Suscripciones",
         },
     ]
+    return _attach_affiliate_links(recs)
+
+
+def _attach_affiliate_links(recs: list[dict]) -> list[dict]:
+    """Anade affiliate_link a cada recomendacion si no la trae ya."""
+    for r in recs:
+        if not isinstance(r, dict):
+            continue
+        if not r.get("affiliate_link"):
+            r["affiliate_link"] = build_affiliate_link(r.get("title", ""))
+    return recs

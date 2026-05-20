@@ -116,6 +116,7 @@ export interface ApiGift {
   affiliate_link?: string;
   relevance?: number;
   is_purchased: boolean;
+  click_count?: number;
   created_at: string;
 }
 

@@ -82,6 +82,7 @@ class Gift(Base):
     affiliate_link = Column(String)
     relevance = Column(Float, default=5.0)  # 1-10
     is_purchased = Column(Boolean, default=False)
+    click_count = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relaciones

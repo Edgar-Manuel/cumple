@@ -5,7 +5,7 @@
 
 import type { ApiError } from "@/types/api";
 
-const API_BASE_URL =
+export const API_BASE_URL =
   import.meta.env.VITE_API_ENDPOINT || "http://localhost:8000";
 
 const ACCESS_TOKEN_KEY = "cumple_access_token";

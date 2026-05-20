@@ -49,7 +49,14 @@ export default function Footer() {
           </div>
         </div>
         
-        <div className="mt-8 pt-8 border-t">
+        <div className="mt-8 pt-8 border-t space-y-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            CUMPLE participa en el Programa de Afiliados de Amazon EU, un programa
+            publicitario que permite obtener una comisión por enlazar a Amazon.es y
+            sitios afiliados. Como afiliados de Amazon, recibimos ingresos por las
+            compras elegibles realizadas a través de los enlaces de nuestra
+            plataforma, sin coste adicional para ti.
+          </p>
           <div className="flex flex-col md:flex-row justify-between items-center">
             <p className="text-sm text-muted-foreground">
               &copy; {currentYear} CUMPLE. Todos los derechos reservados.

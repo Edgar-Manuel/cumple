@@ -118,6 +118,7 @@ class Gift(GiftBase):
     id: int
     event_id: int
     is_purchased: bool
+    click_count: int = 0
     created_at: datetime
 
     class Config:
