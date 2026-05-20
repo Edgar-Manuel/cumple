@@ -29,6 +29,10 @@ interface EventListProps {
    */
   events?: EventProps[];
   onEditEvent?: (eventId: string | number) => void;
+  /**
+   * Filtra eventos por tipo (birthday, anniversary, etc.)
+   */
+  categoryFilter?: string | null;
 }
 
 function isValidEventType(type: string): EventProps["type"] {
@@ -62,6 +66,7 @@ function mapApiEventToProps(
 export default function EventList({
   events: providedEvents,
   onEditEvent,
+  categoryFilter,
 }: EventListProps = {}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -91,15 +96,21 @@ export default function EventList({
     return apiEvents.map((e) => mapApiEventToProps(e, contactsById));
   }, [shouldFetch, providedEvents, apiEvents, contactsById]);
 
-  // Filter events based on search query
+  // Filter events based on search query and category
   const filteredEvents = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return eventsList.filter(
-      (event) =>
+    return eventsList.filter((event) => {
+      const matchesSearch =
         event.title.toLowerCase().includes(q) ||
-        event.personName.toLowerCase().includes(q),
-    );
-  }, [eventsList, searchQuery]);
+        event.personName.toLowerCase().includes(q);
+
+      if (!matchesSearch) return false;
+
+      if (categoryFilter === null || categoryFilter === undefined) return true;
+
+      return event.type === categoryFilter;
+    });
+  }, [eventsList, searchQuery, categoryFilter]);
 
   // Sort events by date (closest first)
   const sortedEvents = useMemo(

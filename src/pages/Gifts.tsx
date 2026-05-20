@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -17,17 +18,13 @@ import { useContacts } from "@/hooks/useContacts";
 import { giftsService } from "@/services/giftsService";
 import { apiGiftToRecommendation } from "@/types/gift";
 import type { GiftRecommendation } from "@/types/gift";
-import type { ApiContact } from "@/types/api";
+import type { ApiContact, ApiGift } from "@/types/api";
 
 export default function Gifts() {
   const { data: events, isLoading: isLoadingEvents } = useEvents();
   const { data: contacts } = useContacts();
 
   const [selectedContact, setSelectedContact] = useState<string>("todos");
-  const [recommendations, setRecommendations] = useState<GiftRecommendation[]>(
-    [],
-  );
-  const [isLoadingGifts, setIsLoadingGifts] = useState(false);
 
   const contactsById = useMemo(() => {
     const map = new Map<number, ApiContact>();
@@ -35,37 +32,32 @@ export default function Gifts() {
     return map;
   }, [contacts]);
 
-  // Cargar los regalos guardados de todos los eventos
-  useEffect(() => {
-    if (!events) return;
-    let cancelled = false;
-    setIsLoadingGifts(true);
+  const eventIds = events?.map((e) => e.id) ?? [];
 
-    (async () => {
-      try {
-        const all: GiftRecommendation[] = [];
-        for (const event of events) {
-          try {
-            const gifts = await giftsService.listByEvent(event.id);
-            const contact = contactsById.get(event.contact_id);
-            const personName = contact?.name ?? "Sin contacto";
-            gifts.forEach((g) =>
-              all.push(apiGiftToRecommendation(g, personName)),
-            );
-          } catch {
-            // Si un evento no tiene regalos guardados, continuar
-          }
-        }
-        if (!cancelled) setRecommendations(all);
-      } finally {
-        if (!cancelled) setIsLoadingGifts(false);
-      }
-    })();
+  const giftsQueries = useQueries({
+    queries: eventIds.map((id) => ({
+      queryKey: ["gifts", "event", id],
+      queryFn: () => giftsService.listByEvent(id),
+    })),
+  });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [events, contactsById]);
+  const isLoadingGifts = giftsQueries.some((q) => q.isLoading);
+
+  const recommendations = useMemo(() => {
+    const all: GiftRecommendation[] = [];
+    giftsQueries.forEach((query, index) => {
+      const gifts = query.data as ApiGift[] | undefined;
+      if (!gifts) return;
+      const event = events?.[index];
+      if (!event) return;
+      const contact = contactsById.get(event.contact_id);
+      const personName = contact?.name ?? "Sin contacto";
+      gifts.forEach((g) =>
+        all.push(apiGiftToRecommendation(g, personName)),
+      );
+    });
+    return all;
+  }, [giftsQueries, events, contactsById]);
 
   const filteredRecommendations = useMemo(() => {
     if (selectedContact === "todos") return recommendations;
@@ -76,7 +68,6 @@ export default function Gifts() {
     });
   }, [recommendations, selectedContact, events]);
 
-  // Agrupar por categoría
   const recommendationsByCategory = useMemo(() => {
     return filteredRecommendations.reduce(
       (acc, rec) => {

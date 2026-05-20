@@ -14,11 +14,14 @@ import type { ApiContact, ApiEvent } from "@/types/api";
 
 type ViewMode = "grid" | "list";
 
+interface ContactListProps {
+  categoryFilter?: string | null;
+}
+
 function mapApiContactToProps(
   contact: ApiContact,
   events: ApiEvent[] | undefined,
 ): ContactProps {
-  // Buscar el evento de cumpleaños asociado a este contacto para mostrar fecha
   const birthdayEvent = events?.find(
     (e) => e.contact_id === contact.id && e.event_type === "birthday",
   );
@@ -35,7 +38,7 @@ function mapApiContactToProps(
   };
 }
 
-export default function ContactList() {
+export default function ContactList({ categoryFilter }: ContactListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -54,16 +57,26 @@ export default function ContactList() {
     return contacts.map((c) => mapApiContactToProps(c, events));
   }, [contacts, events]);
 
-  // Filter contacts based on search query
+  // Filter contacts based on search query and category
   const filteredContacts = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    return mappedContacts.filter(
-      (contact) =>
+    return mappedContacts.filter((contact) => {
+      const matchesSearch =
         contact.name.toLowerCase().includes(query) ||
         (contact.email && contact.email.toLowerCase().includes(query)) ||
-        (contact.phone && contact.phone.includes(searchQuery)),
-    );
-  }, [mappedContacts, searchQuery]);
+        (contact.phone && contact.phone.includes(searchQuery));
+
+      if (!matchesSearch) return false;
+
+      if (categoryFilter === null || categoryFilter === undefined) return true;
+
+      if (categoryFilter === "favorites") {
+        return (contact.relationshipLevel ?? 0) >= 4;
+      }
+
+      return contact.relationship === categoryFilter;
+    });
+  }, [mappedContacts, searchQuery, categoryFilter]);
 
   // Sort contacts by name
   const sortedContacts = useMemo(

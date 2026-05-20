@@ -36,12 +36,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEvents, useUpcomingEvents, useCreateEvent } from "@/hooks/useEvents";
-import { useContacts, useCreateContact } from "@/hooks/useContacts";
+import { useContacts } from "@/hooks/useContacts";
 import { useToast } from "@/components/ui/use-toast";
 import { ApiClientError } from "@/lib/apiClient";
 import type { ApiContact, ApiEvent } from "@/types/api";
 
-// Mapeo de tipo de evento del backend al tipo aceptado por EventCard.
 const mapEventType = (
   type: ApiEvent["event_type"],
 ): EventProps["type"] => {
@@ -104,11 +103,10 @@ const Dashboard = () => {
     useState(false);
   const [personFilter, setPersonFilter] = useState<string>("all");
 
-  const { data: events, isLoading: isLoadingEvents } = useEvents();
+  const { data: events, isLoading: isLoadingEvents, error: eventsError } = useEvents();
   const { data: upcoming, isLoading: isLoadingUpcoming } = useUpcomingEvents(30);
-  const { data: contacts, isLoading: isLoadingContacts } = useContacts();
+  const { data: contacts, isLoading: isLoadingContacts, error: contactsError } = useContacts();
   const createEvent = useCreateEvent();
-  const createContact = useCreateContact();
 
   const contactsById = useMemo(() => {
     const map = new Map<number, ApiContact>();
@@ -212,91 +210,61 @@ const Dashboard = () => {
     setPersonFilter(value);
   };
 
-  const handleCreateEvent = (newEvent: Omit<EventProps, "id">) => {
-    // CreateEventDialog (legacy) provides personName + extra fields; we need contact_id.
-    // The dialog should be updated separately; here we try to resolve via name.
-    const matchedContact = contacts?.find((c) => c.name === newEvent.personName);
-    if (!matchedContact) {
+  const handleCreateEvent = (data: {
+    title: string;
+    date: Date;
+    type: "birthday" | "anniversary" | "graduation" | "holiday" | "other";
+    personName: string;
+    contactId?: number | string;
+  }) => {
+    if (!data.contactId) {
       toast({
-        title: "Contacto no encontrado",
+        title: "Selecciona un contacto",
         description:
-          "Selecciona un contacto válido para asociar al evento.",
+          "Para crear un evento necesitas asociarlo a un contacto existente.",
         variant: "destructive",
       });
       return;
     }
 
-    const dateIso =
-      newEvent.date instanceof Date
-        ? newEvent.date.toISOString().slice(0, 10)
-        : String(newEvent.date);
+    const contactIdNum =
+      typeof data.contactId === "number"
+        ? data.contactId
+        : parseInt(data.contactId, 10);
+
+    if (Number.isNaN(contactIdNum)) {
+      toast({
+        title: "Contacto inválido",
+        description: "El identificador del contacto no es válido.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     createEvent.mutate(
       {
-        contact_id: matchedContact.id,
-        title: newEvent.title,
-        event_type: newEvent.type,
-        date: dateIso,
+        contact_id: contactIdNum,
+        title: data.title,
+        event_type: data.type,
+        date: data.date.toISOString(),
         reminder_days: 7,
       },
       {
         onSuccess: () => {
           toast({
             title: "Evento creado",
-            description: `Se ha creado el evento "${newEvent.title}".`,
+            description: `Se ha creado "${data.title}" correctamente.`,
           });
           setIsCreateEventDialogOpen(false);
         },
         onError: (err) => {
-          const description =
+          const message =
             err instanceof ApiClientError
               ? err.detail
               : "No se pudo crear el evento.";
           toast({
             title: "Error",
-            description,
-            variant: "destructive",
-          });
-        },
-      },
-    );
-  };
-
-  const handleCreateContact = (newContact: Omit<Contact, "id">) => {
-    createContact.mutate(
-      {
-        name: newContact.name,
-        email: newContact.email || undefined,
-        phone: newContact.phone || undefined,
-        relationship: newContact.relationship || undefined,
-        interests: newContact.interests || undefined,
-        affinity:
-          typeof newContact.affinity === "number"
-            ? newContact.affinity
-            : undefined,
-        how_we_met: newContact.how_we_met || undefined,
-        notes: newContact.notes || undefined,
-        photo_url: newContact.photo_url || undefined,
-      },
-      {
-        onSuccess: () => {
-          toast({
-            title: "Contacto creado",
-            description: `Se ha creado el contacto "${newContact.name}".`,
-          });
-          setIsCreateContactDialogOpen(false);
-          if (!isCreateEventDialogOpen) {
-            setIsCreateEventDialogOpen(true);
-          }
-        },
-        onError: (err) => {
-          const description =
-            err instanceof ApiClientError
-              ? err.detail
-              : "No se pudo crear el contacto.";
-          toast({
-            title: "Error",
-            description,
+            description: message,
             variant: "destructive",
           });
         },
@@ -305,6 +273,7 @@ const Dashboard = () => {
   };
 
   const isLoading = isLoadingEvents || isLoadingUpcoming || isLoadingContacts;
+  const apiError = eventsError || contactsError;
   const greetingName =
     user?.full_name || user?.username || user?.email || "Usuario";
 
@@ -336,136 +305,149 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Dashboard cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            {dashboardCards.map((card) => (
-              <div
-                key={card.id}
-                className="rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden relative h-40"
-              >
-                <div
-                  className={`absolute inset-0 bg-gradient-to-br ${card.color} opacity-90`}
-                />
-                <div className="p-6 relative z-10 h-full flex flex-col justify-between">
-                  <div className="flex justify-between items-start">
-                    <div className="flex flex-col space-y-2">
-                      <h3 className="font-semibold text-white">{card.title}</h3>
-                      <div className="text-3xl font-bold text-white">
-                        {card.count}
+          {apiError ? (
+            <div className="text-center py-12 bg-destructive/10 rounded-lg mb-8">
+              <p className="text-destructive font-medium">
+                No se pudieron cargar los datos
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {apiError instanceof ApiClientError
+                  ? apiError.detail
+                  : "Verifica tu conexión con el servidor."}
+              </p>
+            </div>
+          ) : isLoading ? (
+            <div className="flex items-center justify-center py-12 mb-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <p className="ml-3 text-muted-foreground">Cargando dashboard...</p>
+            </div>
+          ) : (
+            <>
+              {/* Dashboard cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                {dashboardCards.map((card) => (
+                  <div
+                    key={card.id}
+                    className="rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden relative h-40"
+                  >
+                    <div
+                      className={`absolute inset-0 bg-gradient-to-br ${card.color} opacity-90`}
+                    />
+                    <div className="p-6 relative z-10 h-full flex flex-col justify-between">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col space-y-2">
+                          <h3 className="font-semibold text-white">{card.title}</h3>
+                          <div className="text-3xl font-bold text-white">
+                            {card.count}
+                          </div>
+                          <p className="text-xs text-white opacity-90">
+                            {card.caption}
+                          </p>
+                        </div>
+                        <div className="rounded-full bg-white/20 p-2 backdrop-blur-sm">
+                          {card.icon === "calendar" && (
+                            <CalendarIcon className="h-5 w-5 text-white" />
+                          )}
+                          {card.icon === "users" && (
+                            <Users className="h-5 w-5 text-white" />
+                          )}
+                          {card.icon === "gift" && (
+                            <Gift className="h-5 w-5 text-white" />
+                          )}
+                          {card.icon === "bell" && (
+                            <Bell className="h-5 w-5 text-white" />
+                          )}
+                        </div>
                       </div>
-                      <p className="text-xs text-white opacity-90">
-                        {card.caption}
-                      </p>
-                    </div>
-                    <div className="rounded-full bg-white/20 p-2 backdrop-blur-sm">
-                      {card.icon === "calendar" && (
-                        <CalendarIcon className="h-5 w-5 text-white" />
-                      )}
-                      {card.icon === "users" && (
-                        <Users className="h-5 w-5 text-white" />
-                      )}
-                      {card.icon === "gift" && (
-                        <Gift className="h-5 w-5 text-white" />
-                      )}
-                      {card.icon === "bell" && (
-                        <Bell className="h-5 w-5 text-white" />
-                      )}
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {/* Tabs */}
-          <Tabs
-            value={activeTab}
-            className="mb-8"
-            onValueChange={handleTabChange}
-          >
-            <TabsList className="mb-6">
-              <TabsTrigger value="overview">Resumen</TabsTrigger>
-              <TabsTrigger value="calendar">Calendario</TabsTrigger>
-              <TabsTrigger value="list">Lista</TabsTrigger>
-            </TabsList>
+              {/* Tabs */}
+              <Tabs
+                value={activeTab}
+                className="mb-8"
+                onValueChange={handleTabChange}
+              >
+                <TabsList className="mb-6">
+                  <TabsTrigger value="overview">Resumen</TabsTrigger>
+                  <TabsTrigger value="calendar">Calendario</TabsTrigger>
+                  <TabsTrigger value="list">Lista</TabsTrigger>
+                </TabsList>
 
-            <TabsContent value="overview" className="space-y-4">
-              {isLoading ? (
-                <div className="text-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-                  <p className="mt-4 text-muted-foreground">
-                    Cargando eventos...
-                  </p>
-                </div>
-              ) : upcomingEventProps.length === 0 ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Sin eventos próximos</CardTitle>
-                    <CardDescription>
-                      No tienes eventos programados en los próximos 30 días.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button onClick={() => setIsCreateEventDialogOpen(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Crear primer evento
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <EventList events={upcomingEventProps} />
-              )}
-            </TabsContent>
+                <TabsContent value="overview" className="space-y-4">
+                  {upcomingEventProps.length === 0 ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Sin eventos próximos</CardTitle>
+                        <CardDescription>
+                          No tienes eventos programados en los próximos 30 días.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Button onClick={() => setIsCreateEventDialogOpen(true)}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Crear primer evento
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <EventList events={upcomingEventProps} />
+                  )}
+                </TabsContent>
 
-            <TabsContent value="calendar">
-              <Calendar events={allEventProps} />
-            </TabsContent>
+                <TabsContent value="calendar">
+                  <Calendar events={allEventProps} />
+                </TabsContent>
 
-            <TabsContent value="list">
-              <div className="space-y-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={personFilter}
-                      onValueChange={handlePersonFilterChange}
-                    >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Filtrar por persona" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas las personas</SelectItem>
-                        {uniquePersonNames.map((name) => (
-                          <SelectItem key={name} value={name}>
-                            {name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-muted-foreground">
-                      {filteredEvents.length} eventos encontrados
-                    </p>
+                <TabsContent value="list">
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={personFilter}
+                          onValueChange={handlePersonFilterChange}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Filtrar por persona" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas las personas</SelectItem>
+                            {uniquePersonNames.map((name) => (
+                              <SelectItem key={name} value={name}>
+                                {name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-sm text-muted-foreground">
+                          {filteredEvents.length} eventos encontrados
+                        </p>
+                      </div>
+                    </div>
+
+                    {filteredEvents.length === 0 ? (
+                      <div className="text-center py-12">
+                        <p className="text-muted-foreground">
+                          No hay eventos para mostrar con el filtro actual.
+                        </p>
+                        <Button
+                          onClick={() => handlePersonFilterChange("all")}
+                          className="mt-4"
+                          variant="outline"
+                        >
+                          Mostrar todos los eventos
+                        </Button>
+                      </div>
+                    ) : (
+                      <EventList events={filteredEvents} />
+                    )}
                   </div>
-                </div>
-
-                {filteredEvents.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-muted-foreground">
-                      No hay eventos para mostrar con el filtro actual.
-                    </p>
-                    <Button
-                      onClick={() => handlePersonFilterChange("all")}
-                      className="mt-4"
-                      variant="outline"
-                    >
-                      Mostrar todos los eventos
-                    </Button>
-                  </div>
-                ) : (
-                  <EventList events={filteredEvents} />
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
         </div>
       </main>
 
@@ -482,7 +464,11 @@ const Dashboard = () => {
       <CreateContactDialog
         open={isCreateContactDialogOpen}
         onOpenChange={setIsCreateContactDialogOpen}
-        onCreateContact={handleCreateContact}
+        onSuccess={() => {
+          if (!isCreateEventDialogOpen) {
+            setIsCreateEventDialogOpen(true);
+          }
+        }}
       />
     </div>
   );
