@@ -5,7 +5,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Event, Contact, Message, Gift, User
-from app.schemas import Message as MessageSchema
+from app.schemas import Message as MessageSchema, Gift as GiftSchema
 from app.auth import get_current_active_user
 from app.ai_service import AIService
 
@@ -20,7 +20,7 @@ class GenerateMessageRequest(BaseModel):
 class GenerateRecommendationsRequest(BaseModel):
     event_id: int
     budget: Optional[float] = None
-    save: Optional[bool] = False
+    save: Optional[bool] = True
 
 class GenerateSocialPostRequest(BaseModel):
     event_id: int
@@ -77,13 +77,13 @@ async def generate_message(
 
     return message
 
-@router.post("/gifts/recommendations", response_model=GeneratedContent)
+@router.post("/gifts/recommendations", response_model=List[GiftSchema])
 async def generate_gift_recommendations(
     request: GenerateRecommendationsRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Genera recomendaciones de regalos para un evento"""
+    """Genera y guarda recomendaciones de regalos para un evento"""
     event = db.query(Event).filter(
         Event.id == request.event_id,
         Event.user_id == current_user.id,
@@ -102,14 +102,38 @@ async def generate_gift_recommendations(
             detail="Contact not found",
         )
 
-    content = await AIService.generate_gift_recommendations(
+    recommendations = await AIService.generate_gift_recommendations(
         person_name=contact.name,
         interests=contact.interests,
         budget=request.budget,
         relationship=contact.relationship or "friend",
     )
 
-    return GeneratedContent(content=content)
+    if not recommendations:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="No se pudieron generar recomendaciones. Verifica tu OPENAI_API_KEY.",
+        )
+
+    # Crear regalos en la BD
+    created_gifts: list[Gift] = []
+    for rec in recommendations:
+        gift = Gift(
+            event_id=event.id,
+            title=rec.get("title", "Sin título"),
+            description=rec.get("description"),
+            price=rec.get("price"),
+            category=rec.get("category"),
+        )
+        db.add(gift)
+        created_gifts.append(gift)
+
+    if request.save:
+        db.commit()
+        for gift in created_gifts:
+            db.refresh(gift)
+
+    return created_gifts
 
 @router.post("/social/generate", response_model=GeneratedContent)
 async def generate_social_post(

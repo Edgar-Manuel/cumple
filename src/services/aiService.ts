@@ -2,14 +2,10 @@
  * Servicio de IA con la API Backend
  */
 import { apiClient } from "@/lib/apiClient";
-import type { ApiMessage } from "@/types/api";
+import type { ApiMessage, ApiGift } from "@/types/api";
 
 export type SocialPlatform = "instagram" | "twitter" | "facebook" | "whatsapp";
 export type MessageTone = "formal" | "friendly" | "intimate";
-
-interface GeneratedContent {
-  content: string;
-}
 
 interface GenerateMessageParams {
   event_id: number;
@@ -37,12 +33,12 @@ export const aiService = {
   },
 
   /**
-   * Genera recomendaciones de regalos
+   * Genera y guarda recomendaciones de regalos (devuelve lista de regalos creados)
    */
   async generateGiftRecommendations(
     params: GenerateRecommendationsParams
-  ): Promise<GeneratedContent> {
-    return apiClient.post<GeneratedContent>(
+  ): Promise<ApiGift[]> {
+    return apiClient.post<ApiGift[]>(
       "/ai/gifts/recommendations",
       params
     );
@@ -53,8 +49,8 @@ export const aiService = {
    */
   async generateSocialPost(
     params: GenerateSocialParams
-  ): Promise<GeneratedContent> {
-    return apiClient.post<GeneratedContent>("/ai/social/generate", params);
+  ): Promise<{ content: string }> {
+    return apiClient.post<{ content: string }>("/ai/social/generate", params);
   },
 
   /**
