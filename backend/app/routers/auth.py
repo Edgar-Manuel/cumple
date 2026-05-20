@@ -14,7 +14,7 @@ from app.auth import (
     get_current_active_user,
 )
 from app.config import settings
-from app.main import limiter
+from app.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

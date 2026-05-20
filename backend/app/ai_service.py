@@ -1,11 +1,19 @@
 """Servicio de IA para generación de contenido con OpenAI SDK >= 1.0"""
 import json
-import openai
-from app.config import settings
 from typing import Optional
 
+try:
+    import openai
+    _has_openai = True
+except ImportError:
+    _has_openai = False
+
+from app.config import settings
+
 # Cliente asíncrono de OpenAI (SDK moderno >= 1.0)
-client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
+client = None
+if _has_openai and settings.OPENAI_API_KEY:
+    client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 class AIService:

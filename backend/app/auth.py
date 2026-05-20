@@ -1,7 +1,8 @@
 """Autenticación JWT"""
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from app.config import settings
@@ -10,19 +11,23 @@ from app.models import User
 from app.schemas import TokenData
 from sqlalchemy.orm import Session
 
-# Contexto para hash de contraseñas
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Argon2 password hasher
+ph = PasswordHasher()
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verificar contraseña"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verificar contraseña con Argon2"""
+    try:
+        ph.verify(hashed_password, plain_password)
+        return True
+    except VerifyMismatchError:
+        return False
 
 def get_password_hash(password: str) -> str:
-    """Obtener hash de contraseña"""
-    return pwd_context.hash(password)
+    """Obtener hash de contraseña con Argon2"""
+    return ph.hash(password)
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """Crear access token JWT"""

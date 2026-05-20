@@ -2,21 +2,17 @@
 import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.responses import JSONResponse
 from app.config import settings
 from app.database import Base, engine
+from app.limiter import limiter
 from app.routers import auth, contacts, events, gifts, ai
 
 # Inicializar tablas solo si no hay migraciones configuradas
 # En producción, usar: alembic upgrade head
 if not os.getenv("SKIP_DB_INIT"):
     Base.metadata.create_all(bind=engine)
-
-# Rate limiter
-limiter = Limiter(key_func=get_remote_address)
 
 # Crear aplicación
 app = FastAPI(
@@ -33,6 +29,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Attach rate limiter
+app.state.limiter = limiter
 
 # Manejar errores de rate limiting
 @app.exception_handler(RateLimitExceeded)

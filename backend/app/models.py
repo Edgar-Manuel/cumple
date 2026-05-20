@@ -1,6 +1,6 @@
 """Modelos de base de datos"""
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean, JSON
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship as rel
 from datetime import datetime
 from app.database import Base
 
@@ -18,8 +18,8 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relaciones
-    contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")
-    events = relationship("Event", back_populates="user", cascade="all, delete-orphan")
+    contacts = rel("Contact", back_populates="user", cascade="all, delete-orphan")
+    events = rel("Event", back_populates="user", cascade="all, delete-orphan")
 
 class Contact(Base):
     """Modelo de Contacto"""
@@ -40,8 +40,8 @@ class Contact(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relaciones
-    user = relationship("User", back_populates="contacts")
-    events = relationship("Event", back_populates="contact", cascade="all, delete-orphan")
+    user = rel("User", back_populates="contacts")
+    events = rel("Event", back_populates="contact", cascade="all, delete-orphan")
 
 class Event(Base):
     """Modelo de Evento"""
@@ -61,10 +61,10 @@ class Event(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relaciones
-    user = relationship("User", back_populates="events")
-    contact = relationship("Contact", back_populates="events")
-    gifts = relationship("Gift", back_populates="event", cascade="all, delete-orphan")
-    messages = relationship("Message", back_populates="event", cascade="all, delete-orphan")
+    user = rel("User", back_populates="events")
+    contact = rel("Contact", back_populates="events")
+    gifts = rel("Gift", back_populates="event", cascade="all, delete-orphan")
+    messages = rel("Message", back_populates="event", cascade="all, delete-orphan")
 
 class Gift(Base):
     """Modelo de Regalo"""
@@ -83,7 +83,7 @@ class Gift(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relaciones
-    event = relationship("Event", back_populates="gifts")
+    event = rel("Event", back_populates="gifts")
 
 class Message(Base):
     """Modelo de Mensaje Generado"""
@@ -99,4 +99,4 @@ class Message(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relaciones
-    event = relationship("Event", back_populates="messages")
+    event = rel("Event", back_populates="messages")
